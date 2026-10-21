@@ -2,7 +2,7 @@
 
 Uses a test-only engine image (tests/fixtures/engines/spark-faulty) whose Python startup hook
 misbehaves according to spark.velocia.test.fault. The cross-hardware fault is a unit test
-(test_pipeline_units.py); the unsorted-job-output fault comes with TeraSort (T18).
+(test_pipeline_units.py).
 """
 
 import json
@@ -37,8 +37,9 @@ timeout_per_unit: 8s
 
 
 def test_planted_faults_are_reported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    subprocess.run(["docker", "build", "-q", "-t", IMAGE, str(FIXTURE)], check=True,
-                   capture_output=True)  # fmt: skip
+    subprocess.run(
+        ["docker", "build", "-q", "-t", IMAGE, str(FIXTURE)], check=True, capture_output=True
+    )
     monkeypatch.chdir(tmp_path)
     (tmp_path / "engines").mkdir()
     for fault in ("wrong", "noisy", "slow"):
@@ -83,3 +84,34 @@ def test_planted_faults_are_reported(tmp_path: Path, monkeypatch: pytest.MonkeyP
         assert f"3 timeout(s): spark-slow cold {unit}" in flags
     # Cancellation works: 8 timed-out units at 8 s each, not a run that never ends.
     assert elapsed < 15 * 60
+
+
+def test_unsorted_job_output_fails_validation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    subprocess.run(
+        ["docker", "build", "-q", "-t", IMAGE, str(FIXTURE)], check=True, capture_output=True
+    )
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "engines").mkdir()
+    (tmp_path / "engines" / "spark-unsorted.yaml").write_text(
+        f"name: spark-unsorted\nimage: {IMAGE}\nspark_versions: ['3.5']\n"
+        "spark_conf: {spark.velocia.test.fault: unsorted}\n"
+    )
+    (tmp_path / "exp.yaml").write_text(
+        "name: unsorted\nworkload: {kind: job, suite: tera, units: [terasort], rows: 100000}\n"
+        "engines: [spark-vanilla, spark-unsorted]\nreference_engine: spark-vanilla\n"
+        "cluster: {runner: local, executors: 1, executor_cores: 2, executor_memory: 2g}\n"
+        "measures: [wall_time]\nrepetitions: 1\nmodes: [cold]\n"
+    )
+    cli = CliRunner()
+    assert cli.invoke(app, ["datagen", "--suite", "tera", "--rows", "100000"]).exit_code == 0
+    result = cli.invoke(app, ["run", "exp.yaml"])
+    assert result.exit_code == 0, result.output
+    assert "spark-unsorted vs spark-vanilla (cold (cache not dropped)): speedup FAILED" in (
+        result.output
+    )
+    results = tmp_path / "velocia-results"
+    check = next((results / "runs").glob("*-c002-check"))
+    unit = json.loads((check / "checks.json").read_text())["units"][0]
+    assert unit["status"] == "invalid" and "keys out of order" in unit["error"]

@@ -104,10 +104,24 @@ def test_all_22_queries_on_spark_match_duckdb(tmp_path: Path) -> None:
     (work / "queries.json").write_text(json.dumps([{"id": u.id, "sql": u.sql} for u in units]))
     image = get_engine("spark-vanilla").definition.image
     subprocess.run(
-        ["docker", "run", "--rm", "-v", f"{data}:/data:ro", "-v", f"{work}:/work",
-         image, "/opt/spark/bin/spark-submit", "--master", "local[4]", "/work/run.py"],
-        check=True, capture_output=True, timeout=900,
-    )  # fmt: skip
+        [
+            "docker",
+            "run",
+            "--rm",
+            "-v",
+            f"{data}:/data:ro",
+            "-v",
+            f"{work}:/work",
+            image,
+            "/opt/spark/bin/spark-submit",
+            "--master",
+            "local[4]",
+            "/work/run.py",
+        ],
+        check=True,
+        capture_output=True,
+        timeout=900,
+    )
     actual = json.loads((work / "spark.json").read_text())
 
     for unit in units:

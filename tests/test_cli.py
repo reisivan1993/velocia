@@ -25,7 +25,6 @@ def test_version() -> None:
 @pytest.mark.parametrize(
     "args",
     [
-        ["datagen", "--suite", "tera", "--rows", "10"],
         ["hardware", "probe"],
     ],
 )

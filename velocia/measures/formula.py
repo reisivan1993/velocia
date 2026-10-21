@@ -24,11 +24,22 @@ from velocia.config.models import HardwareProfile, MeasureDef
 
 UNIT_INPUTS = frozenset(
     {
-        "wall_s", "task_cpu_s", "task_run_s", "gc_s", "input_rows", "input_bytes",
-        "output_rows", "output_bytes", "shuffle_read_bytes", "shuffle_write_bytes",
-        "shuffle_bytes", "spill_bytes", "stages", "tasks",
+        "wall_s",
+        "task_cpu_s",
+        "task_run_s",
+        "gc_s",
+        "input_rows",
+        "input_bytes",
+        "output_rows",
+        "output_bytes",
+        "shuffle_read_bytes",
+        "shuffle_write_bytes",
+        "shuffle_bytes",
+        "spill_bytes",
+        "stages",
+        "tasks",
     }
-)  # fmt: skip
+)
 CLUSTER_INPUTS = frozenset({"nodes", "executors", "executor_cores", "executor_memory_gb"})
 HW_STANDARD = frozenset({"price_per_node_hour_usd", "watts_per_node", "accelerators_per_node"})
 NAMESPACES = {"unit": UNIT_INPUTS, "cluster": CLUSTER_INPUTS, "hw": None}  # None: open set

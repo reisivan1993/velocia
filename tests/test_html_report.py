@@ -7,32 +7,71 @@ from velocia.report.html import render_html
 def _report(units: int, engines: list[str], fail: set[str] | None = None) -> dict[str, Any]:
     ref = engines[0]
     measures = ["wall_time", "cost_usd"]
-    cells = [{"cell_key": f"k{i}", "engine": e, "cluster": "default", "mode": "cold",
-              "mode_label": "cold (cache not dropped)", "config": {}, "config_hash": "h",
-              "status": "done"} for i, e in enumerate(engines)]  # fmt: skip
+    cells = [
+        {
+            "cell_key": f"k{i}",
+            "engine": e,
+            "cluster": "default",
+            "mode": "cold",
+            "mode_label": "cold (cache not dropped)",
+            "config": {},
+            "config_hash": "h",
+            "status": "done",
+        }
+        for i, e in enumerate(engines)
+    ]
     results = []
     for i, engine in enumerate(engines):
         for u in [*[f"q{n}" for n in range(1, units + 1)], "_total"]:
             for m in measures:
                 is_ref = engine == ref
                 failed = not is_ref and u in (fail or set())
-                results.append({
-                    "cell_key": f"k{i}", "engine": engine, "mode": "cold", "config_hash": "h",
-                    "unit_id": u, "measure": m, "measure_unit": "s" if m == "wall_time" else "USD",
-                    "direction": "lower", "n": 5, "median": 1.0 + i, "p95": 1.2, "cv": 0.02,
-                    "cv_flag": False, "ratio": None if is_ref else 1.5 + 0.01 * i,
-                    "ci_low": None if is_ref else 1.4, "ci_high": None if is_ref else 1.6,
-                    "correctness": "fail" if failed or (u == "_total" and fail and not is_ref)
-                    else "pass", "timeouts": 0,
-                })  # fmt: skip
+                results.append(
+                    {
+                        "cell_key": f"k{i}",
+                        "engine": engine,
+                        "mode": "cold",
+                        "config_hash": "h",
+                        "unit_id": u,
+                        "measure": m,
+                        "measure_unit": "s" if m == "wall_time" else "USD",
+                        "direction": "lower",
+                        "n": 5,
+                        "median": 1.0 + i,
+                        "p95": 1.2,
+                        "cv": 0.02,
+                        "cv_flag": False,
+                        "ratio": None if is_ref else 1.5 + 0.01 * i,
+                        "ci_low": None if is_ref else 1.4,
+                        "ci_high": None if is_ref else 1.6,
+                        "correctness": "fail"
+                        if failed or (u == "_total" and fail and not is_ref)
+                        else "pass",
+                        "timeouts": 0,
+                    }
+                )
     return {
-        "format": "velocia-report", "version": 1,
-        "experiment": {"id": "e-1", "name": "exp", "reference_engine": ref, "repetitions": 5,
-                       "bootstrap_seed": 1, "spec": {"name": "exp"}},
-        "dataset": None, "label": "Data derived from TPC-DS; not an official TPC result.",
-        "hardware_manifests": {}, "cross_hardware": False, "cells": cells, "measures": measures,
-        "results": results, "measure_definitions": [], "plan_markers": {}, "flags": [],
-    }  # fmt: skip
+        "format": "velocia-report",
+        "version": 1,
+        "experiment": {
+            "id": "e-1",
+            "name": "exp",
+            "reference_engine": ref,
+            "repetitions": 5,
+            "bootstrap_seed": 1,
+            "spec": {"name": "exp"},
+        },
+        "dataset": None,
+        "label": "Data derived from TPC-DS; not an official TPC result.",
+        "hardware_manifests": {},
+        "cross_hardware": False,
+        "cells": cells,
+        "measures": measures,
+        "results": results,
+        "measure_definitions": [],
+        "plan_markers": {},
+        "flags": [],
+    }
 
 
 def test_self_contained_and_small_for_99_units_and_3_engines() -> None:

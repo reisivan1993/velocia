@@ -208,6 +208,8 @@ def test_estimate_without_known_units() -> None:
     assert estimate(experiment, expand(experiment)).units == 1
     raw = experiment.model_dump()
     raw["workload"] = {**raw["workload"], "units": "all"}
+    assert estimate(Experiment.model_validate(raw), expand(experiment)).units == 1  # terasort
+    raw["workload"] = {**raw["workload"], "suite": "kmeans"}  # no workload plugin yet
     est = estimate(Experiment.model_validate(raw), expand(experiment))
     assert est.units is None and est.duration is None and est.worst_case is None
 

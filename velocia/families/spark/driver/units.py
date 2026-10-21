@@ -17,7 +17,8 @@ WARMUP_REP = 0
 @dataclass(frozen=True)
 class Unit:
     id: str
-    sql: str
+    sql: str | None = None  # a SQL unit
+    job: str | None = None  # or a job unit (jobs.JOBS)
 
 
 def tag(run_id: str, unit_id: str, rep: int) -> str:

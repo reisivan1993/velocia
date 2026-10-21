@@ -50,6 +50,13 @@ class DatasetManifest(StrictModel):
     velocia_version: str
 
 
+def results_label(dataset_label: str) -> str:
+    """How results on a dataset are labeled; TPC-derived data is never an official TPC result."""
+    if "TPC" in dataset_label:
+        return f"Data {dataset_label}; not an official TPC result."
+    return f"Data: {dataset_label}."
+
+
 def dataset_checksum(tables: list[DatasetTable]) -> str:
     """Checksum of the data content: same rows give the same checksum in any format."""
     canonical = json.dumps(

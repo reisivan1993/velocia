@@ -15,9 +15,18 @@ def plan(*names: str, children: list[dict[str, Any]] | None = None) -> dict[str,
     return node
 
 
-def task_end(stage_id: int, cpu_ns: int = 0, run_ms: int = 0, rows: int = 0, nbytes: int = 0,
-             shuffle_read: int = 0, shuffle_write: int = 0, spill: int = 0, gc_ms: int = 0,
-             reason: str = "Success") -> dict[str, Any]:  # fmt: skip
+def task_end(
+    stage_id: int,
+    cpu_ns: int = 0,
+    run_ms: int = 0,
+    rows: int = 0,
+    nbytes: int = 0,
+    shuffle_read: int = 0,
+    shuffle_write: int = 0,
+    spill: int = 0,
+    gc_ms: int = 0,
+    reason: str = "Success",
+) -> dict[str, Any]:
     return {
         "Event": "SparkListenerTaskEnd",
         "Stage ID": stage_id,
@@ -38,33 +47,51 @@ def task_end(stage_id: int, cpu_ns: int = 0, run_ms: int = 0, rows: int = 0, nby
 
 def job_start(job_id: int, stage_ids: list[int], tag: str | None) -> dict[str, Any]:
     props = {"spark.job.description": tag} if tag else {}
-    return {"Event": "SparkListenerJobStart", "Job ID": job_id, "Stage IDs": stage_ids,
-            "Properties": props}  # fmt: skip
+    return {
+        "Event": "SparkListenerJobStart",
+        "Job ID": job_id,
+        "Stage IDs": stage_ids,
+        "Properties": props,
+    }
 
 
 def stage_completed(stage_id: int) -> dict[str, Any]:
-    return {"Event": "SparkListenerStageCompleted",
-            "Stage Info": {"Stage ID": stage_id, "Completion Time": 1}}  # fmt: skip
+    return {
+        "Event": "SparkListenerStageCompleted",
+        "Stage Info": {"Stage ID": stage_id, "Completion Time": 1},
+    }
 
 
 SQL = "org.apache.spark.sql.execution.ui."
 
 
-def sql_start(execution_id: int, tag: str, time: int, plan_info: dict[str, Any],
-              root: int | None = None) -> dict[str, Any]:  # fmt: skip
-    return {"Event": SQL + "SparkListenerSQLExecutionStart", "executionId": execution_id,
-            "rootExecutionId": execution_id if root is None else root, "description": tag,
-            "time": time, "sparkPlanInfo": plan_info}  # fmt: skip
+def sql_start(
+    execution_id: int, tag: str, time: int, plan_info: dict[str, Any], root: int | None = None
+) -> dict[str, Any]:
+    return {
+        "Event": SQL + "SparkListenerSQLExecutionStart",
+        "executionId": execution_id,
+        "rootExecutionId": execution_id if root is None else root,
+        "description": tag,
+        "time": time,
+        "sparkPlanInfo": plan_info,
+    }
 
 
 def sql_update(execution_id: int, plan_info: dict[str, Any]) -> dict[str, Any]:
-    return {"Event": SQL + "SparkListenerSQLAdaptiveExecutionUpdate", "executionId": execution_id,
-            "sparkPlanInfo": plan_info}  # fmt: skip
+    return {
+        "Event": SQL + "SparkListenerSQLAdaptiveExecutionUpdate",
+        "executionId": execution_id,
+        "sparkPlanInfo": plan_info,
+    }
 
 
 def sql_end(execution_id: int, time: int) -> dict[str, Any]:
-    return {"Event": SQL + "SparkListenerSQLExecutionEnd", "executionId": execution_id,
-            "time": time}  # fmt: skip
+    return {
+        "Event": SQL + "SparkListenerSQLExecutionEnd",
+        "executionId": execution_id,
+        "time": time,
+    }
 
 
 def two_unit_app() -> list[dict[str, Any]]:

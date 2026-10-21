@@ -23,12 +23,20 @@ CLUSTER = LocalCluster(runner="local", executors=2, executor_cores=3, executor_m
 
 def _app(tmp_path: Path, **kw: Any) -> AppSpec:
     defaults: dict[str, Any] = dict(
-        run_id="exp-c001-r1", image="velocia/engine-spark-vanilla:3.5.9",
-        spark_conf={"spark.sql.adaptive.enabled": "true"}, driver=build_driver(tmp_path / "d"),
-        task="time", mode="cold", reps=[1], warmup=False, units=[{"id": "q1", "sql": "select 1"}],
-        dataset_location=Path("relative/data"), tables=["lineitem"], timeout_per_unit_s=60,
+        run_id="exp-c001-r1",
+        image="velocia/engine-spark-vanilla:3.5.9",
+        spark_conf={"spark.sql.adaptive.enabled": "true"},
+        driver=build_driver(tmp_path / "d"),
+        task="time",
+        mode="cold",
+        reps=[1],
+        warmup=False,
+        units=[{"id": "q1", "sql": "select 1"}],
+        dataset_location=Path("relative/data"),
+        tables=["lineitem"],
+        timeout_per_unit_s=60,
         app_timeout_s=600,
-    )  # fmt: skip
+    )
     return AppSpec(**{**defaults, **kw})
 
 
@@ -92,8 +100,9 @@ def test_builtin_measures() -> None:
     profile = HardwareProfile(
         name="apu", price_per_node_hour_usd=3.6, watts_per_node=500, accelerators_per_node=2
     )
-    c = ClusterInputs(nodes=2, executors=2, executor_cores=4, profile=profile,
-                      default_node_hour_usd=0.4)  # fmt: skip
+    c = ClusterInputs(
+        nodes=2, executors=2, executor_cores=4, profile=profile, default_node_hour_usd=0.4
+    )
     u = UnitInputs(wall_s=1800)
     assert BUILTINS["wall_time"].compute(u, c) == (1800, None)
     assert BUILTINS["node_hours"].compute(u, c) == (1.0, None)
@@ -160,8 +169,17 @@ def test_ratio_text_never_bare() -> None:
 
 
 def test_markdown_marks_failed_units_and_labels_tpc() -> None:
-    row = {"config_hash": "h", "mode": "cold", "measure": "wall_time", "measure_unit": "s",
-           "direction": "lower", "n": 5, "median": 1.0, "cv": 0.01, "cv_flag": False}  # fmt: skip
+    row = {
+        "config_hash": "h",
+        "mode": "cold",
+        "measure": "wall_time",
+        "measure_unit": "s",
+        "direction": "lower",
+        "n": 5,
+        "median": 1.0,
+        "cv": 0.01,
+        "cv_flag": False,
+    }
     report = {
         "experiment": {
             "id": "e1",
@@ -213,47 +231,99 @@ def test_compute_results_correctness_ratios_and_total(tmp_path: Path) -> None:
     from velocia.orchestrator.run import Prepared, compute_results
     from velocia.workloads import Unit
 
-    experiment = Experiment.model_validate({
-        "name": "t", "workload": {"kind": "sql", "suite": "tpch", "scale_factor": 0.1},
-        "engines": ["spark-vanilla", "spark-comet"], "reference_engine": "spark-vanilla",
-        "cluster": {"runner": "local", "executors": 1, "executor_cores": 2,
-                    "executor_memory": "1g"},
-        "measures": ["wall_time"], "repetitions": 5, "modes": ["cold"],
-    })  # fmt: skip
+    experiment = Experiment.model_validate(
+        {
+            "name": "t",
+            "workload": {"kind": "sql", "suite": "tpch", "scale_factor": 0.1},
+            "engines": ["spark-vanilla", "spark-comet"],
+            "reference_engine": "spark-vanilla",
+            "cluster": {
+                "runner": "local",
+                "executors": 1,
+                "executor_cores": 2,
+                "executor_memory": "1g",
+            },
+            "measures": ["wall_time"],
+            "repetitions": 5,
+            "modes": ["cold"],
+        }
+    )
     cells = expand(experiment)
     ref, cand = cells
-    prepared = Prepared(experiment, "", "h", {}, [Unit("q1", "sql"), Unit("q2", "sql")],  # type: ignore[arg-type]
-                        None, [BUILTINS["wall_time"]], {"default": None}, [])  # type: ignore[arg-type]  # fmt: skip
+    prepared = Prepared(
+        experiment,
+        "",
+        "h",
+        {},
+        [Unit("q1", "sql"), Unit("q2", "sql")],  # type: ignore[arg-type]
+        None,
+        [BUILTINS["wall_time"]],
+        {"default": None},
+        [],
+    )  # type: ignore[arg-type]
     with Catalog(tmp_path) as cat:
         cat.insert("experiment", {"experiment_id": "e", "bootstrap_seed": 1})
         for cell in cells:
-            cat.insert("cell", {"experiment_id": "e", "cell_key": cell.cell_key,
-                                "hardware_manifest_hash": "hw"})  # fmt: skip
+            cat.insert(
+                "cell",
+                {"experiment_id": "e", "cell_key": cell.cell_key, "hardware_manifest_hash": "hw"},
+            )
         walls = {ref.cell_key: (2000, 1000), cand.cell_key: (1000, 500)}
         for cell in cells:
             for rep in range(1, 6):
                 run_id = f"{cell.cell_key}-r{rep}"
-                cat.insert("run", {"run_id": run_id, "experiment_id": "e",
-                                   "cell_key": cell.cell_key})  # fmt: skip
+                cat.insert(
+                    "run", {"run_id": run_id, "experiment_id": "e", "cell_key": cell.cell_key}
+                )
                 q1, q2 = walls[cell.cell_key]
                 status_q2 = "timeout" if (cell is cand and rep == 5) else "ok"
-                cat.insert_many("unit_run", [
-                    {"run_id": run_id, "unit_id": "q1", "rep": rep, "wall_ms": q1,
-                     "status": "ok", "discarded": False},
-                    {"run_id": run_id, "unit_id": "q2", "rep": rep,
-                     "wall_ms": q2 if status_q2 == "ok" else None, "status": status_q2,
-                     "discarded": False},
-                ])  # fmt: skip
+                cat.insert_many(
+                    "unit_run",
+                    [
+                        {
+                            "run_id": run_id,
+                            "unit_id": "q1",
+                            "rep": rep,
+                            "wall_ms": q1,
+                            "status": "ok",
+                            "discarded": False,
+                        },
+                        {
+                            "run_id": run_id,
+                            "unit_id": "q2",
+                            "rep": rep,
+                            "wall_ms": q2 if status_q2 == "ok" else None,
+                            "status": status_q2,
+                            "discarded": False,
+                        },
+                    ],
+                )
             check_run = f"{cell.cell_key}-check"
-            cat.insert("run", {"run_id": check_run, "experiment_id": "e",
-                               "cell_key": cell.cell_key})  # fmt: skip
+            cat.insert(
+                "run", {"run_id": check_run, "experiment_id": "e", "cell_key": cell.cell_key}
+            )
             wrong = cell is cand
-            cat.insert_many("unit_check", [
-                {"run_id": check_run, "cell_key": cell.cell_key, "unit_id": "q1", "rows": 4,
-                 "checksum": "111", "status": "ok"},
-                {"run_id": check_run, "cell_key": cell.cell_key, "unit_id": "q2", "rows": 4,
-                 "checksum": "999" if wrong else "222", "status": "ok"},
-            ])  # fmt: skip
+            cat.insert_many(
+                "unit_check",
+                [
+                    {
+                        "run_id": check_run,
+                        "cell_key": cell.cell_key,
+                        "unit_id": "q1",
+                        "rows": 4,
+                        "checksum": "111",
+                        "status": "ok",
+                    },
+                    {
+                        "run_id": check_run,
+                        "cell_key": cell.cell_key,
+                        "unit_id": "q2",
+                        "rows": 4,
+                        "checksum": "999" if wrong else "222",
+                        "status": "ok",
+                    },
+                ],
+            )
         compute_results(cat, "e", prepared, cells, VelociaConfig())
         rows = {(r["engine"], r["unit_id"]): r for r in cat.query("SELECT * FROM result")}
 
@@ -320,15 +390,22 @@ def test_cross_hardware_needs_the_override_and_a_normalized_measure() -> None:
     local = {"runner": "local", "executors": 1, "executor_cores": 2, "executor_memory": "1g"}
 
     def experiment(allow: bool) -> Experiment:
-        return Experiment.model_validate({
-            "name": "x", "workload": {"kind": "sql", "suite": "tpch", "scale_factor": 1},
-            "clusters": {"cpu": {**local, "hardware_profile": "cpu"},
-                         "apu": {**local, "hardware_profile": "apu"}},
-            "engines": [{"name": "spark-vanilla", "cluster": "cpu"},
-                        {"name": "spark-apu", "cluster": "apu"}],
-            "reference_engine": "spark-vanilla",
-            "comparison": {"allow_cross_hardware": allow},
-        })  # fmt: skip
+        return Experiment.model_validate(
+            {
+                "name": "x",
+                "workload": {"kind": "sql", "suite": "tpch", "scale_factor": 1},
+                "clusters": {
+                    "cpu": {**local, "hardware_profile": "cpu"},
+                    "apu": {**local, "hardware_profile": "apu"},
+                },
+                "engines": [
+                    {"name": "spark-vanilla", "cluster": "cpu"},
+                    {"name": "spark-apu", "cluster": "apu"},
+                ],
+                "reference_engine": "spark-vanilla",
+                "comparison": {"allow_cross_hardware": allow},
+            }
+        )
 
     profiles = {"cpu": cpu, "apu": apu}
     wall, cost = BUILTINS["wall_time"], BUILTINS["cost_usd"]
@@ -338,5 +415,9 @@ def test_cross_hardware_needs_the_override_and_a_normalized_measure() -> None:
         check_hardware(experiment(True), profiles, [wall], probe)
     check_hardware(experiment(True), profiles, [wall, cost], probe)
     # Same hardware on both clusters (a price difference is not hardware): no objection.
-    check_hardware(experiment(False), {"cpu": cpu, "apu": HardwareProfile(name="apu",
-                   price_per_node_hour_usd=9)}, [wall], probe)  # fmt: skip
+    check_hardware(
+        experiment(False),
+        {"cpu": cpu, "apu": HardwareProfile(name="apu", price_per_node_hour_usd=9)},
+        [wall],
+        probe,
+    )

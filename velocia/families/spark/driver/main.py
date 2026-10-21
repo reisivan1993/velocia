@@ -4,13 +4,17 @@
 
 ``run.json`` (written by Velocia, version 1)::
 
-    {"version": 1, "run_id": "...", "task": "time" | "check", "mode": "cold" | "warm",
-     "reps": [1], "warmup": false, "timeout_s": 1800, "float_round_decimals": 4,
-     "units": [{"id": "q1", "sql": "..."}], "tables": {"lineitem": "/data/.../lineitem"},
-     "output_dir": "/velocia/out"}
+    {"version": 1, "run_id": "...", "task": "time" | "check" | "teragen",
+     "mode": "cold" | "warm", "reps": [1], "warmup": false, "timeout_s": 1800,
+     "float_round_decimals": 4,
+     "units": [{"id": "q1", "sql": "..."} | {"id": "terasort", "job": "terasort"}],
+     "tables": {"lineitem": "/data/.../lineitem"}, "output_dir": "/velocia/out",
+     "scratch_dir": "/velocia/work/scratch", "teragen": {"rows", "seed", "partitions", "output"}}
 
 ``time`` writes ``timings.json`` (rewritten after every unit, so a crash keeps what finished);
-``check`` writes ``checks.json`` with one row count and checksum per unit (untimed, ADR-5).
+``check`` writes ``checks.json`` with one row count and checksum per unit (untimed, ADR-5);
+job units write into ``scratch_dir`` and their validator's verdict goes into ``checks.json``.
+``teragen`` generates TeraSort input data and writes ``teragen.json``.
 """
 
 import argparse
@@ -21,6 +25,7 @@ import time
 from functools import partial
 from typing import Any
 
+from .jobs import JOBS, VALIDATORS, teragen
 from .units import Unit, guarded, run_units, tag
 
 TIMINGS_FORMAT = "velocia-timings"
@@ -73,7 +78,10 @@ def _time(spark: Any, spec: dict[str, Any], units: list[Unit], out_path: str) ->
         # The job group carries the tag as job description into every job and SQL execution.
         sc.setJobGroup(unit_tag, unit_tag, interruptOnCancel=True)
         try:
-            spark.sql(unit.sql).write.format("noop").mode("overwrite").save()
+            if unit.job is not None:
+                JOBS[unit.job](spark, spec["tables"], _scratch(spec, unit))
+            else:
+                spark.sql(unit.sql).write.format("noop").mode("overwrite").save()
         finally:
             sc.setLocalProperty("spark.jobGroup.id", None)
             sc.setLocalProperty("spark.job.description", None)
@@ -121,6 +129,29 @@ def checksum(spark: Any, sql: str, decimals: int) -> dict[str, Any]:
     return {"rows": int(row["rows"]), "checksum": str(row["checksum"] or 0)}
 
 
+def _scratch(spec: dict[str, Any], unit: Unit) -> str:
+    return os.path.join(spec["scratch_dir"], unit.id)
+
+
+def _check_job(spark: Any, spec: dict[str, Any], unit: Unit) -> dict[str, Any]:
+    """Run the job once more, untimed, and let its validator judge the output."""
+    assert unit.job is not None
+    output = _scratch(spec, unit)
+    JOBS[unit.job](spark, spec["tables"], output)
+    return VALIDATORS[unit.job](spark, spec["tables"], output)
+
+
+def _teragen(spark: Any, spec: dict[str, Any], out_path: str) -> None:
+    params = spec["teragen"]
+    rows = teragen(
+        spark, int(params["rows"]), int(params["seed"]), int(params["partitions"]), params["output"]
+    )
+    _write_json(
+        out_path,
+        {"format": "velocia-teragen", "version": 1, "rows": rows, "spark": _spark_info(spark)},
+    )
+
+
 def _check(spark: Any, spec: dict[str, Any], units: list[Unit], out_path: str) -> None:
     sc = spark.sparkContext
     decimals = int(spec.get("float_round_decimals", 4))
@@ -129,11 +160,22 @@ def _check(spark: Any, spec: dict[str, Any], units: list[Unit], out_path: str) -
     for unit in units:
         unit_tag = tag(spec["run_id"], unit.id, -1)  # -1: correctness pass, never timed
         sc.setJobGroup(unit_tag, unit_tag, interruptOnCancel=True)
-        status, error, value = guarded(
-            unit_tag, timeout_s, partial(checksum, spark, unit.sql, decimals), sc.cancelJobGroup
-        )
-        entry: dict[str, Any] = {"unit_id": unit.id, "tag": unit_tag, "status": status,
-                                 "error": error, "rows": None, "checksum": None}  # fmt: skip
+        if unit.job is not None:
+            work = partial(_check_job, spark, spec, unit)
+        else:
+            work = partial(checksum, spark, unit.sql or "", decimals)
+        status, error, value = guarded(unit_tag, timeout_s, work, sc.cancelJobGroup)
+        problem = value.pop("problem", None) if value is not None else None
+        if problem:
+            status, error = "invalid", problem  # the job ran but its output is wrong
+        entry: dict[str, Any] = {
+            "unit_id": unit.id,
+            "tag": unit_tag,
+            "status": status,
+            "error": error,
+            "rows": None,
+            "checksum": None,
+        }
         if value is not None:
             entry.update(value)
         results.append(entry)
@@ -168,9 +210,11 @@ def main(argv: list[str] | None = None) -> None:
         spark.sparkContext.setJobGroup(setup_tag, setup_tag)
         for name, path in spec["tables"].items():
             spark.read.parquet(path).createOrReplaceTempView(name)
-        units = [Unit(u["id"], u["sql"]) for u in spec["units"]]
+        units = [Unit(u["id"], u.get("sql"), u.get("job")) for u in spec["units"]]
         os.makedirs(spec["output_dir"], exist_ok=True)
-        if spec["task"] == "time":
+        if spec["task"] == "teragen":
+            _teragen(spark, spec, os.path.join(spec["output_dir"], "teragen.json"))
+        elif spec["task"] == "time":
             _time(spark, spec, units, os.path.join(spec["output_dir"], "timings.json"))
         elif spec["task"] == "check":
             _check(spark, spec, units, os.path.join(spec["output_dir"], "checks.json"))

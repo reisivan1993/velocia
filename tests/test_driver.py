@@ -11,12 +11,14 @@ from velocia.families.spark.package import ZIP_PACKAGE, build_driver, driver_zip
 UNITS = [Unit("q1", "select 1"), Unit("q2", "select 2")]
 
 
-def _run(execute: Any, warmup: bool = False, reps: list[int] | None = None,
-         timeout_s: float = 5.0) -> tuple[list[dict[str, Any]], list[str]]:  # fmt: skip
+def _run(
+    execute: Any, warmup: bool = False, reps: list[int] | None = None, timeout_s: float = 5.0
+) -> tuple[list[dict[str, Any]], list[str]]:
     results: list[dict[str, Any]] = []
     cancelled: list[str] = []
-    run_units(UNITS, "r1", reps or [1], warmup, timeout_s, execute, cancelled.append,
-              results.append)  # fmt: skip
+    run_units(
+        UNITS, "r1", reps or [1], warmup, timeout_s, execute, cancelled.append, results.append
+    )
     return results, cancelled
 
 
@@ -78,18 +80,27 @@ def test_driver_zip_is_reproducible_and_self_contained(tmp_path: Path) -> None:
     assert f"{ZIP_PACKAGE}/main.py" in names and f"{ZIP_PACKAGE}/units.py" in names
     # The zip imports on its own, without the rest of velocia on the path.
     out = subprocess.run(
-        [sys.executable, "-I", "-c",
-         "import sys; sys.path.insert(0, sys.argv[1]); import velocia_driver.main, "
-         "velocia_driver.units; print('velocia' in sys.modules)", str(package.zip_path)],
-        capture_output=True, text=True, check=True, cwd=tmp_path,
-    )  # fmt: skip
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            "import sys; sys.path.insert(0, sys.argv[1]); import velocia_driver.main, "
+            "velocia_driver.units; print('velocia' in sys.modules)",
+            str(package.zip_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=tmp_path,
+    )
     assert out.stdout.strip() == "False"
 
 
 def test_driver_type_checks_for_python_310() -> None:
     result = subprocess.run(
-        [sys.executable, "-m", "mypy", "--python-version", "3.10",
-         "velocia/families/spark/driver"],
-        capture_output=True, text=True, cwd=Path(__file__).parent.parent,
-    )  # fmt: skip
+        [sys.executable, "-m", "mypy", "--python-version", "3.10", "velocia/families/spark/driver"],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).parent.parent,
+    )
     assert result.returncode == 0, result.stdout

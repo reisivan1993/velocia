@@ -3,6 +3,7 @@
 spark.velocia.test.fault = wrong  -> every query result is cut to one row (wrong results)
                          = noisy  -> each query first sleeps a random 0-1.5 s (high variation)
                          = slow   -> each query first runs a Spark job far longer than any timeout
+                         = unsorted -> DataFrame.orderBy does nothing (unsorted job output)
 """
 
 import importlib.abc
@@ -27,6 +28,18 @@ def _patch(module):
         return df.limit(1) if fault == "wrong" else df
 
     module.SparkSession.sql = sql
+
+    from pyspark.sql.dataframe import DataFrame  # imported by session.py already
+
+    original_order_by = DataFrame.orderBy
+
+    def order_by(self, *cols, **kwargs):
+        if self.sparkSession.conf.get("spark.velocia.test.fault", "") == "unsorted":
+            return self
+        return original_order_by(self, *cols, **kwargs)
+
+    DataFrame.orderBy = order_by
+    DataFrame.sort = order_by
 
 
 class _Hook(importlib.abc.MetaPathFinder):

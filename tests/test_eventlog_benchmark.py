@@ -47,8 +47,9 @@ def test_reader_throughput_and_memory(tmp_path: Path) -> None:
     size = log.stat().st_size
 
     before = time.time()
-    out = subprocess.run([sys.executable, "-c", SCRIPT, str(log)], capture_output=True, text=True,
-                         check=True)  # fmt: skip
+    out = subprocess.run(
+        [sys.executable, "-c", SCRIPT, str(log)], capture_output=True, text=True, check=True
+    )
     cpu_s, tasks_seen = out.stdout.split()
     rss = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss
     rss_mb = rss / (1024 * 1024) if sys.platform == "darwin" else rss / 1024  # bytes vs KiB

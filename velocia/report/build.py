@@ -11,6 +11,7 @@ from typing import Any
 
 import yaml
 
+from velocia.datagen.manifest import results_label
 from velocia.store.catalog import Catalog
 from velocia.workloads.sql import natural_key
 
@@ -34,9 +35,13 @@ def build_report(catalog: Catalog, experiment_id: str) -> dict[str, Any]:
     )
     results = sorted(
         catalog.query("SELECT * FROM result WHERE experiment_id = ?", [experiment_id]),
-        key=lambda r: (r["cell_key"], r["measure"], r["unit_id"] != TOTAL_UNIT,
-                       natural_key(r["unit_id"])),
-    )  # fmt: skip
+        key=lambda r: (
+            r["cell_key"],
+            r["measure"],
+            r["unit_id"] != TOTAL_UNIT,
+            natural_key(r["unit_id"]),
+        ),
+    )
     runs = catalog.query(
         "SELECT run_id, cell_key, task, status, manifest_json FROM run WHERE experiment_id = ? "
         "ORDER BY run_id",
@@ -61,8 +66,9 @@ def build_report(catalog: Catalog, experiment_id: str) -> dict[str, Any]:
                 f"{r['measure']} {r['cv']:.0%}"
             )
     for (engine, mode, unit), measures in noisy.items():
-        flags.append(f"high variation (CV > threshold): {engine} {mode} {unit}: "
-                     f"{', '.join(measures)}")  # fmt: skip
+        flags.append(
+            f"high variation (CV > threshold): {engine} {mode} {unit}: {', '.join(measures)}"
+        )
     for r in results:
         if r["unit_id"] == TOTAL_UNIT or r["measure"] != first_measure:
             continue
@@ -81,8 +87,13 @@ def build_report(catalog: Catalog, experiment_id: str) -> dict[str, Any]:
                 "unreliable; rerun the experiment"
             )
     markers = _plan_markers(catalog, experiment_id)
-    accelerated = sorted({cells_by_key[k]["engine"] for k, m in markers.items() if m["accelerated"]
-                          and k in cells_by_key})  # fmt: skip
+    accelerated = sorted(
+        {
+            cells_by_key[k]["engine"]
+            for k, m in markers.items()
+            if m["accelerated"] and k in cells_by_key
+        }
+    )
     if accelerated and "task_cpu_time" in spec_measures(spec):
         flags.append(
             "task_cpu_time counts Spark task threads only; native work that "
@@ -107,11 +118,7 @@ def build_report(catalog: Catalog, experiment_id: str) -> dict[str, Any]:
             "spec": spec,
         },
         "dataset": dataset_manifest,
-        "label": (
-            f"Data {dataset_manifest['label']}; not an official TPC result."
-            if dataset_manifest
-            else None
-        ),
+        "label": (results_label(dataset_manifest["label"]) if dataset_manifest else None),
         "hardware_manifests": hardware,
         "cross_hardware": len(hardware) > 1,
         "cells": [

@@ -5,6 +5,7 @@ lands; stubs exit with code 2 and name the task, so nothing pretends to work.
 """
 
 import json
+import os
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, NoReturn
@@ -14,6 +15,7 @@ import typer
 from velocia import __version__
 from velocia.config import ConfigError, VelociaConfig, load_model, models
 from velocia.datagen.duckdb_tpc import DatagenError, generate
+from velocia.datagen.tera import generate_tera
 from velocia.doctor import doctor as run_doctor
 from velocia.doctor import engine_check
 from velocia.engines.docker import DockerError, build_image, inspect_image
@@ -118,23 +120,36 @@ def datagen(
     out: Annotated[Path | None, typer.Option(help="Output directory.")] = None,
 ) -> None:
     """Generate a dataset and its manifest."""
-    if suite is Suite.tera:
-        _not_implemented("T18")
     if iceberg:
         _fail("--iceberg is not supported yet")
-    if sf is None:
-        _fail(f"--sf is required for --suite {suite.value}")
-    if rows is not None:
-        _fail(f"--rows does not apply to --suite {suite.value}")
     results_dir = Path(_config().results_dir)
+    fmt = models.DataFormat(data_format.value)
     try:
-        manifest, created = generate(
-            models.Suite(suite.value),
-            sf,
-            models.DataFormat(data_format.value),
-            out or results_dir / "data",
-            progress=typer.echo,
-        )
+        if suite is Suite.tera:
+            if rows is None:
+                _fail("--rows is required for --suite tera")
+            if sf is not None:
+                _fail("--sf does not apply to --suite tera")
+            manifest, created = generate_tera(
+                rows,
+                fmt,
+                out or results_dir / "data",
+                results_dir / "drivers",
+                cores=min(os.cpu_count() or 4, 8),
+                progress=typer.echo,
+            )
+        else:
+            if sf is None:
+                _fail(f"--sf is required for --suite {suite.value}")
+            if rows is not None:
+                _fail(f"--rows does not apply to --suite {suite.value}")
+            manifest, created = generate(
+                models.Suite(suite.value),
+                sf,
+                fmt,
+                out or results_dir / "data",
+                progress=typer.echo,
+            )
     except DatagenError as exc:
         _fail(str(exc))
     catalog_copy = results_dir / "datasets" / f"{manifest.dataset_id}.json"
@@ -313,13 +328,16 @@ def engines_check(
     """Run the engine smoke test."""
     if cluster is not None:
         _fail("--cluster needs the external runner, which is not available yet")
-    typer.echo(f"Checking {name}: TPC-H-derived q1, q3, q6 at SF0.01 against spark-vanilla ...")
+    typer.echo(
+        f"Checking {name} against spark-vanilla: TPC-H-derived q1, q3, q6 at SF0.01 and a "
+        "100,000-row TeraSort ..."
+    )
     result = engine_check(name, spark, _config())
     for line in result.lines:
         typer.echo(f"  {line}")
     if not result.ok:
         _fail(f"engine check failed for {name}")
-    typer.echo(f"{name}: ok (results in experiment {result.experiment_id})")
+    typer.echo(f"{name}: ok (experiments {result.experiment_id})")
 
 
 @measures_app.command("list")

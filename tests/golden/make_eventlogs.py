@@ -35,8 +35,9 @@ def main() -> None:
     work = Path(tempfile.mkdtemp(prefix="velocia-golden-"))
     try:
         velocia = [sys.executable, "-m", "velocia.cli.app"]
-        subprocess.run([*velocia, "datagen", "--suite", "tpch", "--sf", "0.01"], cwd=work,
-                       check=True)  # fmt: skip
+        subprocess.run(
+            [*velocia, "datagen", "--suite", "tpch", "--sf", "0.01"], cwd=work, check=True
+        )
         (work / "exp.yaml").write_text(EXPERIMENT)
         subprocess.run([*velocia, "run", "exp.yaml"], cwd=work, check=True)
         OUT.mkdir(parents=True, exist_ok=True)

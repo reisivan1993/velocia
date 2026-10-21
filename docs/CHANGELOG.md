@@ -1,5 +1,10 @@
 # Spec changelog
 
+## 2026-10-21 — TeraSort (T18, DataFrame fallback D-11)
+
+- `velocia datagen --suite tera --rows N` (TeraGen as a seeded Spark job, Parquet with a 10-byte binary `key` and a 90-byte binary `value`); workload `tera` with unit `terasort`; its validator (sortedness within and across files, rows and checksum equal to the input) runs in the correctness pass and an invalid output is a correctness `fail` (checks status `invalid`). `run.json` gains task `teragen`, `scratch_dir` and job units (`{"id", "job"}`). `velocia engines check` adds a 100,000-row TeraSort.
+- Results label: "not an official TPC result" only for TPC-derived data; other data reads "Data: <label>."
+
 ## 2026-10-21 — planted faults and cross-hardware rule (T23)
 
 - `velocia run` refuses engines whose clusters have different hardware manifests unless `comparison.allow_cross_hardware: true`; with it, at least one normalized measure (cost, node-hours, accelerator-hours, energy or a custom formula) is required (03 §5, now enforced).

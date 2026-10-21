@@ -51,8 +51,10 @@ def _measure_and_profile(root: Path) -> None:
 def _velocia_containers() -> list[str]:
     out = subprocess.run(
         ["docker", "ps", "-a", "--filter", f"label={LABEL}", "--format", "{{.Names}}"],
-        capture_output=True, text=True, check=True,
-    )  # fmt: skip
+        capture_output=True,
+        text=True,
+        check=True,
+    )
     return out.stdout.split()
 
 
@@ -79,9 +81,10 @@ def test_full_pipeline(
     assert report["format"] == "velocia-report" and report["version"] == 1
     assert report["label"] == "Data derived from TPC-H; not an official TPC result."
     comet_totals = [
-        r for r in report["results"]
+        r
+        for r in report["results"]
         if r["engine"] == "spark-comet" and r["unit_id"] == "_total" and r["measure"] == "wall_time"
-    ]  # fmt: skip
+    ]
     assert len(comet_totals) == 2  # cold and warm
     assert all(r["correctness"] == "pass" and r["n"] == 2 for r in comet_totals)
 
@@ -128,14 +131,20 @@ def test_interrupt_leaves_no_containers(tmp_path: Path) -> None:
     env = {**os.environ}
     subprocess.run(
         [sys.executable, "-m", "velocia.cli.app", "datagen", "--suite", "tpch", "--sf", "0.01"],
-        cwd=tmp_path, check=True, capture_output=True, env=env,
-    )  # fmt: skip
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+        env=env,
+    )
     (tmp_path / "exp.yaml").write_text(EXPERIMENT.format(secret="x", reps=5, modes="[cold]"))
     _measure_and_profile(tmp_path)
     proc = subprocess.Popen(
         [sys.executable, "-m", "velocia.cli.app", "run", "exp.yaml"],
-        cwd=tmp_path, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    )  # fmt: skip
+        cwd=tmp_path,
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
     try:
         deadline = time.time() + 120
         while not _velocia_containers():

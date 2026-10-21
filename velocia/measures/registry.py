@@ -11,12 +11,14 @@ from velocia.measures.formula import Formula, FormulaError, hw_inputs, parse
 def _inputs(u: UnitInputs, c: ClusterInputs) -> dict[str, float | None]:
     values: dict[str, float | None] = {"unit.wall_s": u.wall_s}
     values.update({f"unit.{k}": float(v) for k, v in u.telemetry.items()})
-    values.update({
-        "cluster.nodes": float(c.nodes),
-        "cluster.executors": float(c.executors),
-        "cluster.executor_cores": float(c.executor_cores),
-        "cluster.executor_memory_gb": c.executor_memory_gb,
-    })  # fmt: skip
+    values.update(
+        {
+            "cluster.nodes": float(c.nodes),
+            "cluster.executors": float(c.executors),
+            "cluster.executor_cores": float(c.executor_cores),
+            "cluster.executor_memory_gb": c.executor_memory_gb,
+        }
+    )
     values.update(hw_inputs(c.profile))
     return values
 

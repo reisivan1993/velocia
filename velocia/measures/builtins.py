@@ -58,9 +58,13 @@ class Measure:
 
     def describe(self) -> dict[str, str | None]:
         return {
-            "name": self.name, "unit": self.unit, "direction": self.direction.value,
-            "source": self.source, "formula": self.formula, "sha256": self.definition_sha256,
-        }  # fmt: skip
+            "name": self.name,
+            "unit": self.unit,
+            "direction": self.direction.value,
+            "source": self.source,
+            "formula": self.formula,
+            "sha256": self.definition_sha256,
+        }
 
 
 def _wall(u: UnitInputs, c: ClusterInputs) -> Value:

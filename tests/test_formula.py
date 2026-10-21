@@ -11,8 +11,12 @@ from velocia.measures.formula import FormulaError, parse, unknown_hw_inputs
 from velocia.measures.registry import load_measure_file, load_measures
 
 FIXTURES = Path(__file__).parent / "fixtures" / "config" / "valid"
-APU = HardwareProfile(name="apu-node", price_per_node_hour_usd=6.1, accelerators_per_node=2,
-                      custom={"x": 3.0, "cu_per_node_hour": 1.5})  # fmt: skip
+APU = HardwareProfile(
+    name="apu-node",
+    price_per_node_hour_usd=6.1,
+    accelerators_per_node=2,
+    custom={"x": 3.0, "cu_per_node_hour": 1.5},
+)
 
 
 def _cluster(profile: HardwareProfile | None = APU) -> ClusterInputs:

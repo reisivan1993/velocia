@@ -18,6 +18,7 @@ class Unit:
     id: str  # appears in job tags (velocia:<run_id>:<unit_id>:<rep>) and results
     kind: WorkloadKind
     sql: str | None = None
+    job: str | None = None  # name of a driver job (velocia/families/spark/driver/jobs.py)
 
 
 class Workload(Protocol):
@@ -40,9 +41,10 @@ class UnknownUnitError(ValueError):
 
 
 def _builtin() -> dict[Suite, Workload]:
+    from velocia.workloads.jobs import TERA
     from velocia.workloads.sql import TPCH
 
-    return {TPCH.suite: TPCH}
+    return {TPCH.suite: TPCH, TERA.suite: TERA}
 
 
 def load_workloads() -> dict[Suite, Workload]:

@@ -49,8 +49,10 @@ def ratio_chart(rows: list[dict[str, Any]], measure: str) -> Markup:
     for t in _ticks(lo, hi):
         x = _x(t, lo, hi)
         cls = "ref" if t == 1 else "grid"
-        out.append(f'<line class="{cls}" x1="{x:.1f}" x2="{x:.1f}" y1="{PAD - 6}" '
-                   f'y2="{height - PAD + 6}"/>')  # fmt: skip
+        out.append(
+            f'<line class="{cls}" x1="{x:.1f}" x2="{x:.1f}" y1="{PAD - 6}" '
+            f'y2="{height - PAD + 6}"/>'
+        )
         out.append(f'<text class="tick" x="{x:.1f}" y="{height - 8}">{t:g}x</text>')
     out.append(
         f'<text class="axis-note" x="{_x(1, lo, hi) + 4:.1f}" y="{PAD - 10}">'
@@ -63,8 +65,9 @@ def ratio_chart(rows: list[dict[str, Any]], measure: str) -> Markup:
         weight = " total" if r["unit_id"] == TOTAL_UNIT else ""
         tip = f"{unit}: {text}; CV {_pct(r['cv'])}; n={r['n']}; correctness {r['correctness']}"
         out.append(f'<g class="row{weight}"><title>{escape(tip)}</title>')
-        out.append(f'<rect class="hit" x="0" y="{y - ROW_H / 2:.1f}" width="{width}" '
-                   f'height="{ROW_H}"/>')  # fmt: skip
+        out.append(
+            f'<rect class="hit" x="0" y="{y - ROW_H / 2:.1f}" width="{width}" height="{ROW_H}"/>'
+        )
         out.append(f'<text class="unit" x="{LABEL_W - 10}" y="{y + 4:.1f}">{escape(unit)}</text>')
         if r["correctness"] == "fail":
             x = _x(1, lo, hi)
@@ -72,14 +75,17 @@ def ratio_chart(rows: list[dict[str, Any]], measure: str) -> Markup:
         elif r["ratio"] is not None and r["ratio"] > 0:
             if r["ci_low"] and r["ci_high"]:
                 x1, x2 = _x(r["ci_low"], lo, hi), _x(r["ci_high"], lo, hi)
-                out.append(f'<line class="ci" x1="{x1:.1f}" x2="{x2:.1f}" y1="{y:.1f}" '
-                           f'y2="{y:.1f}"/>')  # fmt: skip
+                out.append(
+                    f'<line class="ci" x1="{x1:.1f}" x2="{x2:.1f}" y1="{y:.1f}" y2="{y:.1f}"/>'
+                )
             out.append(
                 f'<circle class="dot" cx="{_x(r["ratio"], lo, hi):.1f}" cy="{y:.1f}" r="4.5"/>'
             )
         cls = "value fail-text" if r["correctness"] == "fail" else "value"
-        out.append(f'<text class="{cls}" x="{LABEL_W + PLOT_W + 12}" y="{y + 4:.1f}">'
-                   f"{escape(text)}</text></g>")  # fmt: skip
+        out.append(
+            f'<text class="{cls}" x="{LABEL_W + PLOT_W + 12}" y="{y + 4:.1f}">'
+            f"{escape(text)}</text></g>"
+        )
     out.append("</svg>")
     return Markup("".join(out))
 

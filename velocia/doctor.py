@@ -12,6 +12,7 @@ import yaml
 from velocia.config import ConfigError, VelociaConfig
 from velocia.config.models import DataFormat, Suite
 from velocia.datagen.duckdb_tpc import DatagenError, generate
+from velocia.datagen.tera import generate_tera
 from velocia.engines.registry import get_engine, load_engines
 from velocia.hardware.probe import probe_local
 from velocia.orchestrator.run import Orchestrator, RunError, prepare
@@ -22,6 +23,7 @@ Status = Literal["ok", "warn", "fail", "skip"]
 MIN_FREE_GIB = 5
 MIN_DOCKER_MEMORY_GIB = 4
 CHECK_UNITS = ["q1", "q3", "q6"]
+CHECK_TERA_ROWS = 100_000
 REFERENCE = "spark-vanilla"
 
 
@@ -51,9 +53,12 @@ def doctor(config: VelociaConfig) -> list[Check]:
             checks.append(Check("docker", status, detail))
             for engine in load_engines(Path(config.engines_dir)).values():
                 image = engine.definition.image
-                present = subprocess.run(
-                    ["docker", "image", "inspect", image], capture_output=True, check=False
-                ).returncode == 0  # fmt: skip
+                present = (
+                    subprocess.run(
+                        ["docker", "image", "inspect", image], capture_output=True, check=False
+                    ).returncode
+                    == 0
+                )
                 checks.append(
                     Check(
                         f"engine {engine.name}",
@@ -79,8 +84,13 @@ def doctor(config: VelociaConfig) -> list[Check]:
             con.execute("LOAD tpch")
         checks.append(Check("duckdb tpch", "ok", f"DuckDB {duckdb.__version__}"))
     except duckdb.Error:
-        checks.append(Check("duckdb tpch", "warn", "not installed yet; the first datagen "
-                            "downloads it from DuckDB"))  # fmt: skip
+        checks.append(
+            Check(
+                "duckdb tpch",
+                "warn",
+                "not installed yet; the first datagen downloads it from DuckDB",
+            )
+        )
     kubectl = shutil.which("kubectl")
     checks.append(
         Check("kubernetes", "skip", "k8s runner not available yet" if kubectl else "no kubectl")
@@ -96,7 +106,8 @@ class EngineCheckResult:
 
 
 def engine_check(name: str, spark: str | None, config: VelociaConfig) -> EngineCheckResult:
-    """Smoke test: TPC-H-derived q1, q3, q6 at SF0.01 against vanilla, correctness required.
+    """Smoke test against vanilla, correctness required: TPC-H-derived q1, q3, q6 at SF0.01
+    and a 100,000-row TeraSort.
 
     Runs in ``<results_dir>/_checks`` so the main catalog only holds real experiments.
     """
@@ -108,29 +119,63 @@ def engine_check(name: str, spark: str | None, config: VelociaConfig) -> EngineC
         spark == v or spark.startswith(v + ".") or v.startswith(spark + ".")
         for v in engine.definition.spark_versions
     ):
-        return EngineCheckResult(False, None, [
-            f"{name} supports Apache Spark {', '.join(engine.definition.spark_versions)}, "
-            f"not {spark}"
-        ])  # fmt: skip
+        return EngineCheckResult(
+            False,
+            None,
+            [
+                f"{name} supports Apache Spark {', '.join(engine.definition.spark_versions)}, "
+                f"not {spark}"
+            ],
+        )
     check_dir = Path(config.results_dir) / "_checks"
     check_config = replace_results_dir(config, check_dir)
+    (check_dir / "datasets").mkdir(parents=True, exist_ok=True)
     try:
-        generate(Suite.tpch, 0.01, DataFormat.parquet_zstd, check_dir / "data")
+        for manifest, _ in (
+            generate(Suite.tpch, 0.01, DataFormat.parquet_zstd, check_dir / "data"),
+            generate_tera(
+                CHECK_TERA_ROWS,
+                DataFormat.parquet_zstd,
+                check_dir / "data",
+                check_dir / "drivers",
+                cores=2,
+            ),
+        ):
+            (check_dir / "datasets" / f"{manifest.dataset_id}.json").write_text(
+                manifest.model_dump_json(indent=2) + "\n", "utf-8"
+            )
     except DatagenError as exc:
         return EngineCheckResult(False, None, [f"test data: {exc}"])
-    (check_dir / "datasets").mkdir(parents=True, exist_ok=True)
-    manifest = check_dir / "data" / "tpch-sf0.01-parquet-zstd" / "_dataset.json"
-    shutil.copyfile(manifest, check_dir / "datasets" / "tpch-sf0.01-parquet-zstd.json")
 
     engines = [REFERENCE] if name == REFERENCE else [REFERENCE, name]
+    lines: list[str] = []
+    ok = True
+    experiment_ids = []
+    for label, workload in (
+        ("sql", {"kind": "sql", "suite": "tpch", "scale_factor": 0.01, "units": CHECK_UNITS}),
+        ("terasort", {"kind": "job", "suite": "tera", "rows": CHECK_TERA_ROWS}),
+    ):
+        passed, experiment_id, part = _smoke(
+            name, f"engine-check-{name}-{label}", engines, workload, check_dir, check_config
+        )
+        ok = ok and passed
+        lines += part
+        if experiment_id:
+            experiment_ids.append(experiment_id)
+    return EngineCheckResult(ok, ", ".join(experiment_ids) or None, lines)
+
+
+def _smoke(
+    name: str,
+    experiment_name: str,
+    engines: list[str],
+    workload: dict[str, object],
+    check_dir: Path,
+    check_config: VelociaConfig,
+) -> tuple[bool, str | None, list[str]]:
     experiment = {
-        "name": f"engine-check-{name}",
-        "workload": {
-            "kind": "sql",
-            "suite": "tpch",
-            "scale_factor": 0.01,
-            "units": CHECK_UNITS,
-        },
+        "name": experiment_name,
+        "workload": workload,
         "engines": engines,
         "reference_engine": REFERENCE,
         "cluster": {
@@ -144,7 +189,7 @@ def engine_check(name: str, spark: str | None, config: VelociaConfig) -> EngineC
         "modes": ["cold"],
         "timeout_per_unit": "5m",
     }
-    path = check_dir / f"engine-check-{name}.yaml"
+    path = check_dir / f"{experiment_name}.yaml"
     path.write_text(yaml.safe_dump(experiment, sort_keys=False), "utf-8")
     lines: list[str] = []
     try:
@@ -153,14 +198,15 @@ def engine_check(name: str, spark: str | None, config: VelociaConfig) -> EngineC
         prepared.warnings[:] = [w for w in prepared.warnings if "repetitions=" not in w]
         experiment_id = Orchestrator(prepared, check_config, check_dir, echo=lines.append).run()
     except RunError as exc:
-        return EngineCheckResult(False, None, [*lines, str(exc)])
+        return False, None, [*lines, str(exc)]
     with Catalog(check_dir) as catalog:
         report = build_report(catalog, experiment_id)
         runs = catalog.query(
             "SELECT run_id, status FROM run WHERE experiment_id = ?", [experiment_id]
         )
-    problems = [f"{r['run_id']}: application {r['status']}" for r in runs
-                if r["status"] != "finished"]  # fmt: skip
+    problems = [
+        f"{r['run_id']}: application {r['status']}" for r in runs if r["status"] != "finished"
+    ]
     for r in report["results"]:
         if r["engine"] != name or r["unit_id"] == TOTAL_UNIT:
             continue
@@ -169,7 +215,7 @@ def engine_check(name: str, spark: str | None, config: VelociaConfig) -> EngineC
         if r["n"] == 0:
             problems.append(f"{r['unit_id']}: no successful timed run")
     lines += [f"problem: {p}" for p in problems]
-    return EngineCheckResult(not problems, experiment_id, lines)
+    return not problems, experiment_id, lines
 
 
 def replace_results_dir(config: VelociaConfig, results_dir: Path) -> VelociaConfig:

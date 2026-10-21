@@ -17,16 +17,17 @@ class AppSpec:
     image: str
     spark_conf: dict[str, str]
     driver: DriverPackage
-    task: Literal["time", "check"]
+    task: Literal["time", "check", "teragen"]
     mode: str
     reps: list[int]
     warmup: bool
-    units: list[dict[str, str]]  # {"id", "sql"}
+    units: list[dict[str, str | None]]  # {"id", "sql"} or {"id", "job"}
     dataset_location: Path
     tables: list[str]
     timeout_per_unit_s: float
     app_timeout_s: float
     float_round_decimals: int = 4
+    teragen: dict[str, int | str] | None = None  # rows, seed, partitions (task teragen)
 
 
 @dataclass(frozen=True)

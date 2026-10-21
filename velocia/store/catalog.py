@@ -47,10 +47,28 @@ CREATE TABLE IF NOT EXISTS result (
 """
 
 RESULT_COLUMNS = [
-    "experiment_id", "cell_key", "engine", "cluster", "hardware_manifest_hash", "config_hash",
-    "mode", "unit_id", "measure", "measure_unit", "direction", "n", "median", "p95", "cv",
-    "cv_flag", "ratio", "ci_low", "ci_high", "correctness", "timeouts",
-]  # fmt: skip
+    "experiment_id",
+    "cell_key",
+    "engine",
+    "cluster",
+    "hardware_manifest_hash",
+    "config_hash",
+    "mode",
+    "unit_id",
+    "measure",
+    "measure_unit",
+    "direction",
+    "n",
+    "median",
+    "p95",
+    "cv",
+    "cv_flag",
+    "ratio",
+    "ci_low",
+    "ci_high",
+    "correctness",
+    "timeouts",
+]
 
 
 class Catalog:

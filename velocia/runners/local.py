@@ -30,6 +30,7 @@ DATA_MOUNT = "/velocia/data"
 DRIVER_MOUNT = "/velocia/driver"
 WORK_MOUNT = "/velocia/work"
 LOG_TAIL_LINES = 40
+TERAGEN_OUTPUT = "teragen-data"  # inside the work dir
 
 
 def _memory_mb(size: str) -> int:
@@ -55,26 +56,37 @@ def docker_command(app: AppSpec, cluster: LocalCluster, work_dir: Path) -> list[
     }
     user = ["--user", f"{os.getuid()}:{os.getgid()}", "-e", "HOME=/tmp"]
     cmd = [
-        "docker", "run", "--rm",
-        "--name", f"velocia-{app.run_id}",
-        "--label", f"{LABEL}={app.run_id}",
-        "--cpus", str(cores),
+        "docker",
+        "run",
+        "--rm",
+        "--name",
+        f"velocia-{app.run_id}",
+        "--label",
+        f"{LABEL}={app.run_id}",
+        "--cpus",
+        str(cores),
         *(user if sys.platform == "linux" else []),
         # Absolute paths: Docker reads a relative one as a named volume.
-        "-v", f"{app.dataset_location.resolve()}:{DATA_MOUNT}:ro",
-        "-v", f"{app.driver.zip_path.parent.resolve()}:{DRIVER_MOUNT}:ro",
-        "-v", f"{work_dir.resolve()}:{WORK_MOUNT}",
+        "-v",
+        f"{app.dataset_location.resolve()}:{DATA_MOUNT}:ro",
+        "-v",
+        f"{app.driver.zip_path.parent.resolve()}:{DRIVER_MOUNT}:ro",
+        "-v",
+        f"{work_dir.resolve()}:{WORK_MOUNT}",
         app.image,
         "/opt/spark/bin/spark-submit",
-        "--master", f"local[{cores}]",
-    ]  # fmt: skip
+        "--master",
+        f"local[{cores}]",
+    ]
     for key, value in sorted(conf.items()):
         cmd += ["--conf", f"{key}={value}"]
     cmd += [
-        "--py-files", f"{DRIVER_MOUNT}/{app.driver.zip_path.name}",
+        "--py-files",
+        f"{DRIVER_MOUNT}/{app.driver.zip_path.name}",
         f"{DRIVER_MOUNT}/{app.driver.launcher_path.name}",
-        "--spec", f"{WORK_MOUNT}/run.json",
-    ]  # fmt: skip
+        "--spec",
+        f"{WORK_MOUNT}/run.json",
+    ]
     return cmd
 
 
@@ -91,6 +103,10 @@ def driver_spec(app: AppSpec) -> dict[str, object]:
         "units": app.units,
         "tables": {t: f"{DATA_MOUNT}/{t}" for t in app.tables},
         "output_dir": f"{WORK_MOUNT}/out",
+        "scratch_dir": f"{WORK_MOUNT}/scratch",  # job unit output, removed with the work dir
+        "teragen": (
+            {**app.teragen, "output": f"{WORK_MOUNT}/{TERAGEN_OUTPUT}"} if app.teragen else None
+        ),
     }
 
 
@@ -134,8 +150,10 @@ def cpu_busy_pct(interval_s: float = 1.0) -> float | None:
     if sys.platform == "darwin":
         out = subprocess.run(
             ["top", "-l", "2", "-s", str(max(1, round(interval_s))), "-n", "0"],
-            capture_output=True, text=True, check=False,
-        )  # fmt: skip
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         idle = re.findall(r"CPU usage:.*?([\d.]+)% idle", out.stdout)
         return 100.0 - float(idle[-1]) if idle else None  # the second sample is the interval
     return None
@@ -166,8 +184,10 @@ class LocalRunner:
         reasons = []
         ps = subprocess.run(
             ["docker", "ps", "--filter", f"label={LABEL}", "--format", "{{.Names}}"],
-            capture_output=True, text=True, check=False,
-        )  # fmt: skip
+            capture_output=True,
+            text=True,
+            check=False,
+        )
         others = [n for n in ps.stdout.split() if n]
         if others:
             reasons.append(f"other Velocia containers running: {', '.join(others)}")
@@ -184,10 +204,23 @@ class LocalRunner:
         if sys.platform != "linux":
             return False
         result = subprocess.run(
-            ["docker", "run", "--rm", "--privileged", "--user", "0", "--entrypoint", "sh",
-             image, "-c", "sync && echo 3 > /proc/sys/vm/drop_caches"],
-            capture_output=True, check=False, timeout=120,
-        )  # fmt: skip
+            [
+                "docker",
+                "run",
+                "--rm",
+                "--privileged",
+                "--user",
+                "0",
+                "--entrypoint",
+                "sh",
+                image,
+                "-c",
+                "sync && echo 3 > /proc/sys/vm/drop_caches",
+            ],
+            capture_output=True,
+            check=False,
+            timeout=120,
+        )
         return result.returncode == 0
 
     def run(self, app: AppSpec) -> AppResult:
@@ -214,8 +247,10 @@ class LocalRunner:
         try:
             proc = subprocess.Popen(
                 docker_command(app, self.cluster, work_dir),
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-            )  # fmt: skip
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
             timer.start()
             assert proc.stdout is not None
             for line in proc.stdout:

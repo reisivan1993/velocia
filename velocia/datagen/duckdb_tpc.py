@@ -167,7 +167,7 @@ def _write_table(
         f"COPY (SELECT * FROM \"{name}\") TO '{quoted_path}' "
         f"(FORMAT parquet, COMPRESSION {COMPRESSION[data_format]}, ROW_GROUP_SIZE {ROW_GROUP_SIZE})"
     )
-    rows, checksum = _content_checksum(con, path)
+    rows, checksum = content_checksum(con, path)
     return DatasetTable(
         name=name,
         rows=rows,
@@ -176,7 +176,7 @@ def _write_table(
     )
 
 
-def _content_checksum(con: duckdb.DuckDBPyConnection, path: Path) -> tuple[int, str]:
+def content_checksum(con: duckdb.DuckDBPyConnection, path: Path) -> tuple[int, str]:
     """Order-independent hash of the rows as written, read back from the Parquet file.
 
     Each row is rendered as text with its column names and hashed; the per-row hashes are

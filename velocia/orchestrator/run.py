@@ -29,10 +29,12 @@ from velocia.config.models import (
     HardwareProfile,
     LocalCluster,
     Mode,
+    Suite,
     VelociaConfig,
 )
 from velocia.datagen.duckdb_tpc import dataset_id as make_dataset_id
-from velocia.datagen.manifest import DatasetManifest
+from velocia.datagen.manifest import DatasetManifest, results_label
+from velocia.datagen.tera import tera_dataset_id
 from velocia.engines.docker import inspect_image
 from velocia.engines.registry import Engine, load_engines
 from velocia.experiment.expander import DEFAULT_CLUSTER, Cell, expand, stable_hash
@@ -79,9 +81,11 @@ def _git_sha() -> str | None:
     if out.returncode != 0:
         return None
     dirty = subprocess.run(
-        ["git", "-C", str(here), "status", "--porcelain"], capture_output=True, text=True,
+        ["git", "-C", str(here), "status", "--porcelain"],
+        capture_output=True,
+        text=True,
         check=False,
-    ).stdout.strip()  # fmt: skip
+    ).stdout.strip()
     return out.stdout.strip() + ("-dirty" if dirty else "")
 
 
@@ -146,11 +150,14 @@ def prepare(path: Path, config: VelociaConfig) -> Prepared:
         ds_id = wl.dataset_id
     elif wl.scale_factor is not None:
         ds_id = make_dataset_id(wl.suite, wl.scale_factor, wl.format)
+    elif wl.rows is not None and wl.suite is Suite.tera:
+        ds_id = tera_dataset_id(wl.rows, wl.format)
     else:
-        raise RunError("workload needs scale_factor or dataset_id")
+        raise RunError("workload needs scale_factor, rows or dataset_id")
     manifest_path = Path(config.results_dir) / "datasets" / f"{ds_id}.json"
     if not manifest_path.is_file():
         sf = f" --sf {wl.scale_factor:g}" if wl.scale_factor is not None else ""
+        sf += f" --rows {wl.rows}" if wl.rows is not None else ""
         raise RunError(
             f"dataset {ds_id} not found; generate it first: "
             f"velocia datagen --suite {wl.suite.value}{sf} --format {wl.format.value}"
@@ -242,13 +249,20 @@ class Orchestrator:
                 experiment_id = f"{exp.name}-{stamp}"
                 seed = int(hashlib.sha256(experiment_id.encode()).hexdigest()[:8], 16)
                 created_at = datetime.now(UTC).replace(tzinfo=None)  # stored as UTC
-                catalog.insert("experiment", {
-                    "experiment_id": experiment_id, "name": exp.name,
-                    "yaml": self._redacted_yaml(),
-                    "spec_hash": self.p.spec_hash, "created_at": created_at,
-                    "velocia_version": __version__, "status": "running",
-                    "bootstrap_seed": seed, "dataset_id": self.p.dataset.dataset_id,
-                })  # fmt: skip
+                catalog.insert(
+                    "experiment",
+                    {
+                        "experiment_id": experiment_id,
+                        "name": exp.name,
+                        "yaml": self._redacted_yaml(),
+                        "spec_hash": self.p.spec_hash,
+                        "created_at": created_at,
+                        "velocia_version": __version__,
+                        "status": "running",
+                        "bootstrap_seed": seed,
+                        "dataset_id": self.p.dataset.dataset_id,
+                    },
+                )
             self._record_dataset(catalog)
 
             cells = expand(exp)
@@ -278,13 +292,23 @@ class Orchestrator:
 
     def _record_dataset(self, catalog: Catalog) -> None:
         d = self.p.dataset
-        catalog.insert("dataset", {
-            "dataset_id": d.dataset_id, "suite": d.suite.value,
-            "generator_params": as_json(d.generator_params), "seed": d.seed, "scale": d.scale,
-            "format": d.data_format.value, "compression": d.compression,
-            "row_group_size": d.row_group_size, "files": d.files, "bytes": d.bytes,
-            "checksum": d.checksum, "manifest_json": d.model_dump_json(),
-        })  # fmt: skip
+        catalog.insert(
+            "dataset",
+            {
+                "dataset_id": d.dataset_id,
+                "suite": d.suite.value,
+                "generator_params": as_json(d.generator_params),
+                "seed": d.seed,
+                "scale": d.scale,
+                "format": d.data_format.value,
+                "compression": d.compression,
+                "row_group_size": d.row_group_size,
+                "files": d.files,
+                "bytes": d.bytes,
+                "checksum": d.checksum,
+                "manifest_json": d.model_dump_json(),
+            },
+        )
 
     def _run_cell(
         self,
@@ -321,13 +345,22 @@ class Orchestrator:
             self.echo(f"warning: quiet check flagged: {'; '.join(quiet.reasons)}")
 
         catalog.forget_cell(experiment_id, cell.cell_key)
-        catalog.insert("cell", {
-            "experiment_id": experiment_id, "cell_key": cell.cell_key, "idx": cell.index,
-            "engine": cell.engine, "cluster": cell.cluster_name,
-            "config_hash": cell.config_hash, "mode": cell.mode.value,
-            "varying": as_json(cell.config.varying), "hardware_manifest_hash": hw_hash,
-            "status": "running", "quiet_check": as_json(quiet.reasons),
-        })  # fmt: skip
+        catalog.insert(
+            "cell",
+            {
+                "experiment_id": experiment_id,
+                "cell_key": cell.cell_key,
+                "idx": cell.index,
+                "engine": cell.engine,
+                "cluster": cell.cluster_name,
+                "config_hash": cell.config_hash,
+                "mode": cell.mode.value,
+                "varying": as_json(cell.config.varying),
+                "hardware_manifest_hash": hw_hash,
+                "status": "running",
+                "quiet_check": as_json(quiet.reasons),
+            },
+        )
 
         base = f"{experiment_id}-c{cell.index:03d}"
         reps = list(range(1, exp.repetitions + 1))
@@ -344,23 +377,38 @@ class Orchestrator:
         for run_id, task, app_reps, warmup in apps:
             passes = (len(app_reps) + (1 if warmup else 0)) if task == "time" else 1
             app = AppSpec(
-                run_id=run_id, image=engine.definition.image, spark_conf=conf, driver=driver,
+                run_id=run_id,
+                image=engine.definition.image,
+                spark_conf=conf,
+                driver=driver,
                 task=task,  # type: ignore[arg-type]
-                mode=cell.mode.value, reps=app_reps, warmup=warmup,
-                units=[{"id": u.id, "sql": u.sql or ""} for u in self.p.units],
+                mode=cell.mode.value,
+                reps=app_reps,
+                warmup=warmup,
+                units=[{"id": u.id, "sql": u.sql, "job": u.job} for u in self.p.units],
                 dataset_location=Path(self.p.dataset.location),
                 tables=[t.name for t in self.p.dataset.tables],
                 timeout_per_unit_s=timeout_s,
                 app_timeout_s=APP_OVERHEAD_S + passes * len(self.p.units) * timeout_s,
                 float_round_decimals=self.config.correctness.float_round_decimals,
-            )  # fmt: skip
-            catalog.insert("run", {
-                "run_id": run_id, "experiment_id": experiment_id, "cell_key": cell.cell_key,
-                "engine": cell.engine, "cluster": cell.cluster_name,
-                "config_hash": cell.config_hash, "mode": cell.mode.value,
-                "rep": ",".join(map(str, app_reps)) or "check", "task": task,
-                "app_id": None, "status": "running", "manifest_json": None,
-            })  # fmt: skip
+            )
+            catalog.insert(
+                "run",
+                {
+                    "run_id": run_id,
+                    "experiment_id": experiment_id,
+                    "cell_key": cell.cell_key,
+                    "engine": cell.engine,
+                    "cluster": cell.cluster_name,
+                    "config_hash": cell.config_hash,
+                    "mode": cell.mode.value,
+                    "rep": ",".join(map(str, app_reps)) or "check",
+                    "task": task,
+                    "app_id": None,
+                    "status": "running",
+                    "manifest_json": None,
+                },
+            )
             try:
                 result = runner.run(app)
             finally:
@@ -368,21 +416,32 @@ class Orchestrator:
             run_dir = self.results_dir / "runs" / run_id
             output = collect(result, run_dir, self.redactor)
             manifest = self._manifest(
-                experiment_id, cell, app, result, output, engine, image, driver, hardware, hw_hash,
+                experiment_id,
+                cell,
+                app,
+                result,
+                output,
+                engine,
+                image,
+                driver,
+                hardware,
+                hw_hash,
                 quiet.reasons,
-            )  # fmt: skip
+            )
             (run_dir / "manifest.json").write_text(as_json(manifest) + "\n", "utf-8")
             app_id = (output.get("spark") or {}).get("app_id")
             catalog.update(
-                "run", {"run_id": run_id},
+                "run",
+                {"run_id": run_id},
                 {"status": result.status, "app_id": app_id, "manifest_json": as_json(manifest)},
-            )  # fmt: skip
+            )
             self._record_outputs(catalog, cell, app, result, output, run_dir)
             self._progress(cell, total, app, result, output)
         catalog.update(
-            "cell", {"experiment_id": experiment_id, "cell_key": cell.cell_key},
+            "cell",
+            {"experiment_id": experiment_id, "cell_key": cell.cell_key},
             {"status": "done"},
-        )  # fmt: skip
+        )
 
     def _manifest(
         self,
@@ -442,7 +501,7 @@ class Orchestrator:
             "quiet_check": {"ok": not quiet_reasons, "reasons": quiet_reasons},
             "host_slept_s": result.host_slept_s,
             "measures": [m.describe() for m in self.p.measures],
-            "label": f"{self.p.dataset.label}; not an official TPC result",
+            "label": results_label(self.p.dataset.label),
         }
 
     def _record_outputs(
@@ -459,38 +518,57 @@ class Orchestrator:
             summaries = self._summaries(run_dir)
             rows = [
                 {
-                    "run_id": app.run_id, "unit_id": u["unit_id"], "rep": u["rep"],
-                    "wall_ms": u["wall_ms"], "status": u["status"], "discarded": u["discarded"],
+                    "run_id": app.run_id,
+                    "unit_id": u["unit_id"],
+                    "rep": u["rep"],
+                    "wall_ms": u["wall_ms"],
+                    "status": u["status"],
+                    "discarded": u["discarded"],
                     "error": u.get("error"),
                     "summary": as_json(summaries[(u["unit_id"], u["rep"])].as_dict())
-                    if (u["unit_id"], u["rep"]) in summaries else None,
+                    if (u["unit_id"], u["rep"]) in summaries
+                    else None,
                 }
                 for u in reported
-            ]  # fmt: skip
+            ]
             seen = {(r["unit_id"], r["rep"]) for r in rows}
             # Units the application never reached (it crashed or timed out) count as failed.
             status = "timeout" if result.status == "timeout" else "failed"
             for rep in ([0] if app.warmup else []) + app.reps:
                 for unit in app.units:
                     if (unit["id"], rep) not in seen:
-                        rows.append({
-                            "run_id": app.run_id, "unit_id": unit["id"], "rep": rep,
-                            "wall_ms": None, "status": status, "discarded": rep == 0,
-                            "error": f"application {result.status}", "summary": None,
-                        })  # fmt: skip
+                        rows.append(
+                            {
+                                "run_id": app.run_id,
+                                "unit_id": unit["id"],
+                                "rep": rep,
+                                "wall_ms": None,
+                                "status": status,
+                                "discarded": rep == 0,
+                                "error": f"application {result.status}",
+                                "summary": None,
+                            }
+                        )
             catalog.insert_many("unit_run", rows)
         else:
             by_id = {u["unit_id"]: u for u in reported}
-            catalog.insert_many("unit_check", [
-                {
-                    "run_id": app.run_id, "cell_key": cell.cell_key, "unit_id": unit["id"],
-                    "rows": by_id.get(unit["id"], {}).get("rows"),
-                    "checksum": by_id.get(unit["id"], {}).get("checksum"),
-                    "status": by_id.get(unit["id"], {}).get("status", "failed"),
-                    "error": by_id.get(unit["id"], {}).get("error", f"application {result.status}"),
-                }
-                for unit in app.units
-            ])  # fmt: skip
+            catalog.insert_many(
+                "unit_check",
+                [
+                    {
+                        "run_id": app.run_id,
+                        "cell_key": cell.cell_key,
+                        "unit_id": unit["id"],
+                        "rows": by_id.get(unit["id"], {}).get("rows"),
+                        "checksum": by_id.get(unit["id"], {}).get("checksum"),
+                        "status": by_id.get(unit["id"], {}).get("status", "failed"),
+                        "error": by_id.get(unit["id"], {}).get(
+                            "error", f"application {result.status}"
+                        ),
+                    }
+                    for unit in app.units
+                ],
+            )
 
     def _summaries(self, run_dir: Path) -> dict[tuple[str, int], UnitSummary]:
         """Per-unit event-log summaries of a run; empty when its log is missing or unreadable."""
@@ -508,9 +586,11 @@ class Orchestrator:
     ) -> None:
         units = [u for u in output.get("units", []) if not u.get("discarded")]
         ok = sum(1 for u in units if u.get("status") == "ok")
-        what = "correctness pass" if app.task == "check" else (
-            f"rep {app.reps[0]}" if len(app.reps) == 1 else f"reps 1-{app.reps[-1]} (warm)"
-        )  # fmt: skip
+        what = (
+            "correctness pass"
+            if app.task == "check"
+            else (f"rep {app.reps[0]}" if len(app.reps) == 1 else f"reps 1-{app.reps[-1]} (warm)")
+        )
         secs = result.ended_at - result.started_at
         line = f"[{cell.index}/{total}] {cell.label} {what}: {ok}/{len(units)} ok, {secs:.0f}s"
         if result.status != "finished":
@@ -528,8 +608,8 @@ def _correctness(
 ) -> str:
     mine = checks.get(cell_key, {}).get(unit)
     ref = checks.get(ref_key, {}).get(unit) if ref_key else None
-    if mine is not None and mine["status"] == "failed":
-        return "fail"  # the query errors on this engine
+    if mine is not None and mine["status"] in ("failed", "invalid"):
+        return "fail"  # the query errors, or the job's validator rejects its output
     if mine is None or ref is None or mine["status"] != "ok" or ref["status"] != "ok":
         return "not_checked"  # missing, timed out, or no usable reference
     same = mine["rows"] == ref["rows"] and mine["checksum"] == ref["checksum"]
@@ -579,10 +659,16 @@ def compute_results(
         )
         for m in prepared.measures:
             value, reason = m.compute(inputs, cluster_inputs[ur["cell_key"]])
-            mv_rows.append({
-                "run_id": ur["run_id"], "unit_id": ur["unit_id"], "rep": ur["rep"],
-                "measure": m.name, "value": value, "null_reason": reason,
-            })  # fmt: skip
+            mv_rows.append(
+                {
+                    "run_id": ur["run_id"],
+                    "unit_id": ur["unit_id"],
+                    "rep": ur["rep"],
+                    "measure": m.name,
+                    "value": value,
+                    "null_reason": reason,
+                }
+            )
             per_rep[(ur["cell_key"], ur["run_id"], ur["rep"], m.name)].append(value)
             if value is not None:
                 values[(ur["cell_key"], ur["unit_id"], m.name)].append(value)
@@ -624,21 +710,39 @@ def compute_results(
                 r = None
                 if not is_ref and ref_key is not None:
                     r = ratio_ci(
-                        vals, values.get((ref_key, unit, m.name), []), m.direction,
+                        vals,
+                        values.get((ref_key, unit, m.name), []),
+                        m.direction,
                         config.statistics.bootstrap_resamples,
                         seed + hash_index(cell.cell_key, unit, m.name),
-                    )  # fmt: skip
-                results.append({
-                    "experiment_id": experiment_id, "cell_key": cell.cell_key,
-                    "engine": cell.engine, "cluster": cell.cluster_name,
-                    "hardware_manifest_hash": cell_rows[cell.cell_key]["hardware_manifest_hash"],
-                    "config_hash": cell.config_hash, "mode": cell.mode.value, "unit_id": unit,
-                    "measure": m.name, "measure_unit": m.unit, "direction": m.direction.value,
-                    "n": s.n, "median": s.median, "p95": s.p95, "cv": s.cv,
-                    "cv_flag": s.cv_flag, "ratio": r.ratio if r else None,
-                    "ci_low": r.ci_low if r else None, "ci_high": r.ci_high if r else None,
-                    "correctness": per_unit[unit], "timeouts": timeouts[(cell.cell_key, unit)],
-                })  # fmt: skip
+                    )
+                results.append(
+                    {
+                        "experiment_id": experiment_id,
+                        "cell_key": cell.cell_key,
+                        "engine": cell.engine,
+                        "cluster": cell.cluster_name,
+                        "hardware_manifest_hash": cell_rows[cell.cell_key][
+                            "hardware_manifest_hash"
+                        ],
+                        "config_hash": cell.config_hash,
+                        "mode": cell.mode.value,
+                        "unit_id": unit,
+                        "measure": m.name,
+                        "measure_unit": m.unit,
+                        "direction": m.direction.value,
+                        "n": s.n,
+                        "median": s.median,
+                        "p95": s.p95,
+                        "cv": s.cv,
+                        "cv_flag": s.cv_flag,
+                        "ratio": r.ratio if r else None,
+                        "ci_low": r.ci_low if r else None,
+                        "ci_high": r.ci_high if r else None,
+                        "correctness": per_unit[unit],
+                        "timeouts": timeouts[(cell.cell_key, unit)],
+                    }
+                )
     catalog.replace_results(experiment_id, results)
 
 
