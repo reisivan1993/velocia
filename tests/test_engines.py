@@ -36,10 +36,17 @@ def test_unknown_engine() -> None:
         get_engine("nope")
 
 
+def test_builtin_comet_engine_enables_plugin() -> None:
+    conf = get_engine("spark-comet").definition.spark_conf
+    assert conf["spark.plugins"] == "org.apache.spark.CometPlugin"
+    assert conf["spark.memory.offHeap.enabled"] == "true"
+
+
 @pytest.mark.docker
 @pytest.mark.skipif(shutil.which("docker") is None, reason="docker not available")
-def test_vanilla_image_builds_and_reports_spark_35() -> None:
-    engine = get_engine("spark-vanilla")
+@pytest.mark.parametrize("name", ["spark-vanilla", "spark-comet"])
+def test_builtin_image_builds_and_reports_spark_35(name: str) -> None:
+    engine = get_engine(name)
     assert engine.build_context is not None
     info = build_image(engine.build_context, engine.definition.image)
     assert info.image_id.startswith("sha256:")

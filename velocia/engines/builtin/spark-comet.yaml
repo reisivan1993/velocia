@@ -1,0 +1,12 @@
+name: spark-comet
+family: spark
+image: velocia/engine-spark-comet:3.5.9-comet1.1.0
+spark_versions: ["3.5"]
+spark_conf:
+  spark.plugins: org.apache.spark.CometPlugin
+  spark.shuffle.manager: org.apache.spark.sql.comet.execution.shuffle.CometShuffleManager
+  spark.memory.offHeap.enabled: "true"
+  # Sizing default for small runs; experiments override it via spark_conf for real clusters.
+  spark.memory.offHeap.size: 2g
+  spark.comet.explain.fallback.enabled: "true"
+notes: "Apache DataFusion Comet 1.1.0 on Apache Spark 3.5.9, built from velocia/engines/builtin/spark-comet/Dockerfile"
