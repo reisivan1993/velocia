@@ -41,6 +41,7 @@ def _memory_mb(size: str) -> int:
 
 
 OOM_KILLED = 137  # SIGKILL, from the kernel's out-of-memory killer
+JAVA_OOM = 52  # Apache Spark's exit code for an uncaught OutOfMemoryError
 JVM_OVERHEAD_MB = 1024  # metaspace, threads, Python driver and native buffers
 
 
@@ -283,6 +284,11 @@ class LocalRunner:
                 notes.append(
                     "killed (exit 137): out of memory; the container needed more than Docker "
                     "could give it. Give Docker more memory or lower executor_memory"
+                )
+            elif exit_code == JAVA_OOM:
+                notes.append(
+                    "Java heap out of memory (exit 52); raise executor_memory (and Docker's "
+                    "memory if needed)"
                 )
         ended = time.time()
         return AppResult(

@@ -62,3 +62,18 @@ The user asked to keep going until a local demo runs, so the execution path was 
 - **Data:** TeraGen derives each row from `sha2(seed:id)` (10-byte key, 90-byte value), so it is deterministic (test: two generations, same checksum) and spreads keys uniformly. Seed 42, 2M rows per file, zstd/snappy as requested.
 - **Validator** (TeraValidate equivalent, in the untimed check pass): output rows and `sum(xxhash64(key, value))` equal the input; each `part-*` file sorted (row order via `coalesce(1)` + `monotonically_increasing_id`); each file's first key >= the previous file's last key. Runs in the engine under test; a planted engine whose `orderBy` does nothing is caught.
 - **First result:** 1M rows, 4 cores, cold: Comet 1.39x [1.34-1.41] vs vanilla, validator pass on both.
+
+## 2026-10-21 — T25: SF10 acceptance on the dev machine (not passed; needs decisions)
+
+Four runs of `examples/acceptance/tpch-sf10.yaml` (TPC-H-derived SF10, vanilla vs Comet, cold, 5 repetitions, local runner) on an Apple M4 Pro whose Docker Desktop VM has 8 GB, with another project's 15 containers running:
+
+| Run | Heap | Comet total speedup | Notes |
+| --- | --- | --- | --- |
+| 1 | 4g | FAILED (correctness) | Comet containers OOM-killed (exit 137: 4g + 2g off-heap + overhead); vanilla q4 `SparkOutOfMemoryError` in 2 reps |
+| 2 | 4g | 2.30x [2.26-2.32] | all correctness pass; vanilla total from 2 complete reps |
+| 3 | 3g | 2.29x [2.22-2.31] | vanilla JVM heap OOM (exit 52) at q10 in 3 of 5 reps |
+| 4 | 3g | 2.36x [2.33-2.41] | vanilla exit 52 in 1 of 5 reps |
+
+- **What works:** medians with CIs and correctness for both engines at SF10; Comet is stable at ~2.3x; every failure was reported as a failure (never a ratio), and now with its cause (exit 137 / 52 explained, memory pre-flight warning).
+- **Not met:** clean vanilla runs (an 8 GB Docker VM is too small for vanilla Spark at SF10 with 4 cores) and D-3 (runs 3 vs 4: 53% of medians inside the first run's CI; even Comet alone ~76%). Between-session drift on this non-quiet machine is ~3% while a 5-repetition median CI is about +/-2-4%, so D-3's median-in-CI test fails even when ratios agree within ~3%.
+- **Needs the user:** (1) give Docker more memory (the Mac has 48 GB) and run on a quiet machine, then `velocia run examples/acceptance/tpch-sf10.yaml` twice and `velocia compare`; (2) decide whether D-3 should judge reproducibility on ratio CIs (overlap, no better/worse flip) rather than raw medians.
