@@ -1,0 +1,75 @@
+# Experiments
+
+An experiment is a YAML file. The full schema is `schemas/experiment.schema.json`; every field is
+checked before anything runs, and errors name the field (for example `engines[1].cluster`).
+
+```yaml
+name: tpch-aqe                     # results are stored under <name>-<timestamp>
+workload:
+  kind: sql                        # sql or job
+  suite: tpch                      # tpch (22 queries) or tera (TeraSort)
+  units: all                       # or a list: [q1, q6]
+  scale_factor: 1                  # tpch; generate first: velocia datagen --suite tpch --sf 1
+  format: parquet-zstd             # or parquet-snappy
+engines: [spark-vanilla, spark-comet]
+reference_engine: spark-vanilla    # ratios are against this engine
+cluster: {runner: local, executors: 1, executor_cores: 4, executor_memory: 3g}
+spark_conf:
+  spark.sql.adaptive.enabled: [true, false]   # a list expands into one cell per value
+measures: [wall_time, task_cpu_time, cost_usd]
+repetitions: 5                     # 5 or more recommended
+modes: [cold, warm]
+timeout_per_unit: 30m
+```
+
+TeraSort:
+
+```yaml
+workload: {kind: job, suite: tera, units: [terasort], rows: 10000000}
+```
+
+with data from `velocia datagen --suite tera --rows 10000000` (a seeded Spark job; the same row
+count always gives the same data).
+
+## Clusters
+
+`runner: local` runs each Spark application in its own Docker container on this machine, in
+Spark's local mode with `executors x executor_cores` cores and all executor memory for the driver.
+Kubernetes (`k8s`) and existing clusters (`external`, for example a vendor's accelerator servers)
+are planned; their fields are already in the schema.
+
+Several clusters, with engines pinned to them:
+
+```yaml
+clusters:
+  cpu: {runner: local, executors: 1, executor_cores: 4, executor_memory: 3g, hardware_profile: cpu-box}
+  apu: {runner: local, executors: 1, executor_cores: 4, executor_memory: 3g, hardware_profile: apu-box}
+engines:
+  - {name: spark-vanilla, cluster: cpu}
+  - {name: spark-apu, cluster: apu}
+comparison: {allow_cross_hardware: true}   # needed when the hardware differs
+```
+
+## Commands
+
+- `velocia run exp.yaml --dry-run`: cells, run count and a rough duration.
+- `velocia run exp.yaml`: run it; `--resume` continues an interrupted experiment from the first
+  unfinished cell.
+- `velocia report <experiment_id> [--format md|json|html] [--measures a,b]`
+- `velocia compare <experiment_a> <experiment_b>`: does b reproduce a?
+
+## velocia.yaml
+
+Optional, in the working directory:
+
+```yaml
+results_dir: ./velocia-results
+engines_dir: ./engines            # your engine definitions
+measures_dir: ./measures          # your formula measures
+hardware_dir: ./hardware          # hardware profiles
+pricing: {default_node_hour_usd: 0.40}
+quiet_check: {max_cpu_pct: 10, max_other_spark_apps: 0}
+correctness: {float_round_decimals: 4}
+statistics: {bootstrap_resamples: 10000, cv_flag_threshold: 0.10}
+redaction: {key_patterns: ["*vault*"]}   # extra keys to treat as secrets
+```

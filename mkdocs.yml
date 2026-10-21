@@ -1,0 +1,20 @@
+site_name: Velocia for Apache Spark
+site_description: Reproducible, statistically honest benchmarks of Apache Spark engines
+docs_dir: docs/user
+strict: true
+nav:
+  - Overview: index.md
+  - Quickstart: quickstart.md
+  - Methodology: methodology.md
+  - Experiments: experiments.md
+  - Measures: measures.md
+  - Engines: engines.md
+  - Results and reports: results.md
+  - Troubleshooting: troubleshooting.md
+theme:
+  name: readthedocs
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true

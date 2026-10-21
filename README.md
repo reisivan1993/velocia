@@ -8,6 +8,13 @@ As of 2026-10-21. Author: Rei. Status: draft v1, ready for implementation planni
 
 It is a **standalone project**: its own repo, its own releases, no dependency on any other tool. It installs with `pip`, needs only Docker or a Kubernetes cluster to run Spark, and stores everything in a local results directory. Its only connection to the outside world is a documented **benchmark bundle** export that any analysis tool can consume.
 
+## Try it
+
+A local comparison of vanilla Apache Spark and Apache DataFusion Comet on TPC-H-derived data
+runs in about 15 minutes: see [`examples/demo/README.md`](examples/demo/README.md). User
+documentation (quickstart, methodology, experiments, measures, engines, results) is in
+[`docs/user/`](docs/user/index.md); build it with `uv run --group docs mkdocs serve`.
+
 ## Files
 
 | File | Contents |
