@@ -1,0 +1,22 @@
+[
+  {
+    "index": 1,
+    "engine": "spark-vanilla",
+    "cluster": "default",
+    "mode": "cold",
+    "spark_conf": {},
+    "varying": {},
+    "config_hash": "64c3ce0ad7c951ef",
+    "cell_key": "e2d39eff9694abcf"
+  },
+  {
+    "index": 2,
+    "engine": "spark-vanilla",
+    "cluster": "default",
+    "mode": "warm",
+    "spark_conf": {},
+    "varying": {},
+    "config_hash": "64c3ce0ad7c951ef",
+    "cell_key": "3de8e63b309ea2a9"
+  }
+]

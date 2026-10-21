@@ -15,6 +15,8 @@ from velocia.config import ConfigError, VelociaConfig, load_model, models
 from velocia.datagen.duckdb_tpc import DatagenError, generate
 from velocia.engines.docker import DockerError, build_image, inspect_image
 from velocia.engines.registry import get_engine, load_engines
+from velocia.experiment.estimate import estimate, format_duration
+from velocia.experiment.expander import expand
 
 app = typer.Typer(
     name="velocia",
@@ -138,7 +140,54 @@ def run(
     resume: Annotated[bool, typer.Option(help="Continue an interrupted experiment.")] = False,
 ) -> None:
     """Expand an experiment into cells and execute them."""
-    _not_implemented("T15")
+    try:
+        spec = load_model(experiment, models.Experiment)
+    except ConfigError as exc:
+        _fail(str(exc))
+    known = load_engines(_user_engines_dir())
+    unknown = [ref.name for ref in spec.engine_refs if ref.name not in known]
+    if unknown:
+        _fail(f"unknown engine(s): {', '.join(unknown)} (known: {', '.join(known) or 'none'})")
+    for warning in spec.warnings():
+        typer.echo(f"warning: {warning}", err=True)
+    if not dry_run:
+        _not_implemented("T15")
+    _print_dry_run(spec)
+
+
+def _print_dry_run(spec: models.Experiment) -> None:
+    cells = expand(spec)
+    est = estimate(spec, cells)
+    units = f"{est.units} units each" if est.units is not None else "unit count not known yet"
+    typer.echo(
+        f"Experiment {spec.name}: {est.cells} cells x {spec.repetitions} repetitions = "
+        f"{est.runs} runs ({units}), plus {est.correctness_passes} correctness passes"
+    )
+    rows = [("#", "engine", "cluster", "mode", "config", "cell_key", "config_hash")]
+    rows += [
+        (
+            str(c.index),
+            c.engine,
+            c.cluster_name,
+            c.mode.value,
+            " ".join(f"{k}={v}" for k, v in c.config.varying.items()) or "-",
+            c.cell_key,
+            c.config_hash,
+        )
+        for c in cells
+    ]
+    widths = [max(len(row[i]) for row in rows) for i in range(len(rows[0]))]
+    for row in rows:
+        typer.echo("  " + "  ".join(v.ljust(w) for v, w in zip(row, widths, strict=True)).rstrip())
+    if est.duration is None:
+        typer.echo("Estimated duration: unknown (no cost model for this workload yet)")
+    else:
+        assert est.worst_case is not None
+        typer.echo(
+            f"Estimated duration: ~{format_duration(est.duration)} (rough; worst case "
+            f"{format_duration(est.worst_case)} if every unit hits the "
+            f"{spec.timeout_per_unit} timeout)"
+        )
 
 
 @app.command()

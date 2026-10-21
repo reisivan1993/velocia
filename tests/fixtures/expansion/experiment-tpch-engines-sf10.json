@@ -1,0 +1,170 @@
+[
+  {
+    "index": 1,
+    "engine": "spark-vanilla",
+    "cluster": "default",
+    "mode": "cold",
+    "spark_conf": {
+      "spark.sql.adaptive.enabled": "true"
+    },
+    "varying": {
+      "spark.sql.adaptive.enabled": "true"
+    },
+    "config_hash": "c08c076372e6455c",
+    "cell_key": "9464aa25946267f8"
+  },
+  {
+    "index": 2,
+    "engine": "spark-gluten",
+    "cluster": "default",
+    "mode": "cold",
+    "spark_conf": {
+      "spark.sql.adaptive.enabled": "true"
+    },
+    "varying": {
+      "spark.sql.adaptive.enabled": "true"
+    },
+    "config_hash": "c08c076372e6455c",
+    "cell_key": "cfa4dbd21209908d"
+  },
+  {
+    "index": 3,
+    "engine": "spark-comet",
+    "cluster": "default",
+    "mode": "cold",
+    "spark_conf": {
+      "spark.sql.adaptive.enabled": "true"
+    },
+    "varying": {
+      "spark.sql.adaptive.enabled": "true"
+    },
+    "config_hash": "c08c076372e6455c",
+    "cell_key": "ff7822b9031dec99"
+  },
+  {
+    "index": 4,
+    "engine": "spark-vanilla",
+    "cluster": "default",
+    "mode": "warm",
+    "spark_conf": {
+      "spark.sql.adaptive.enabled": "true"
+    },
+    "varying": {
+      "spark.sql.adaptive.enabled": "true"
+    },
+    "config_hash": "c08c076372e6455c",
+    "cell_key": "539fcb0991f536d9"
+  },
+  {
+    "index": 5,
+    "engine": "spark-gluten",
+    "cluster": "default",
+    "mode": "warm",
+    "spark_conf": {
+      "spark.sql.adaptive.enabled": "true"
+    },
+    "varying": {
+      "spark.sql.adaptive.enabled": "true"
+    },
+    "config_hash": "c08c076372e6455c",
+    "cell_key": "3ffff49b92af0dc4"
+  },
+  {
+    "index": 6,
+    "engine": "spark-comet",
+    "cluster": "default",
+    "mode": "warm",
+    "spark_conf": {
+      "spark.sql.adaptive.enabled": "true"
+    },
+    "varying": {
+      "spark.sql.adaptive.enabled": "true"
+    },
+    "config_hash": "c08c076372e6455c",
+    "cell_key": "4c2ef74c36ff2153"
+  },
+  {
+    "index": 7,
+    "engine": "spark-vanilla",
+    "cluster": "default",
+    "mode": "cold",
+    "spark_conf": {
+      "spark.sql.adaptive.enabled": "false"
+    },
+    "varying": {
+      "spark.sql.adaptive.enabled": "false"
+    },
+    "config_hash": "b3d1142735bd8cf7",
+    "cell_key": "e87013d250c433ea"
+  },
+  {
+    "index": 8,
+    "engine": "spark-gluten",
+    "cluster": "default",
+    "mode": "cold",
+    "spark_conf": {
+      "spark.sql.adaptive.enabled": "false"
+    },
+    "varying": {
+      "spark.sql.adaptive.enabled": "false"
+    },
+    "config_hash": "b3d1142735bd8cf7",
+    "cell_key": "dca769908aa8f983"
+  },
+  {
+    "index": 9,
+    "engine": "spark-comet",
+    "cluster": "default",
+    "mode": "cold",
+    "spark_conf": {
+      "spark.sql.adaptive.enabled": "false"
+    },
+    "varying": {
+      "spark.sql.adaptive.enabled": "false"
+    },
+    "config_hash": "b3d1142735bd8cf7",
+    "cell_key": "305637152a755f51"
+  },
+  {
+    "index": 10,
+    "engine": "spark-vanilla",
+    "cluster": "default",
+    "mode": "warm",
+    "spark_conf": {
+      "spark.sql.adaptive.enabled": "false"
+    },
+    "varying": {
+      "spark.sql.adaptive.enabled": "false"
+    },
+    "config_hash": "b3d1142735bd8cf7",
+    "cell_key": "c52801f74c757d6a"
+  },
+  {
+    "index": 11,
+    "engine": "spark-gluten",
+    "cluster": "default",
+    "mode": "warm",
+    "spark_conf": {
+      "spark.sql.adaptive.enabled": "false"
+    },
+    "varying": {
+      "spark.sql.adaptive.enabled": "false"
+    },
+    "config_hash": "b3d1142735bd8cf7",
+    "cell_key": "bb4d97de5740a010"
+  },
+  {
+    "index": 12,
+    "engine": "spark-comet",
+    "cluster": "default",
+    "mode": "warm",
+    "spark_conf": {
+      "spark.sql.adaptive.enabled": "false"
+    },
+    "varying": {
+      "spark.sql.adaptive.enabled": "false"
+    },
+    "config_hash": "b3d1142735bd8cf7",
+    "cell_key": "6933cb45745a061c"
+  }
+]

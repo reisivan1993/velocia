@@ -95,6 +95,8 @@ custom:                 # free-form coefficients for custom measures, exposed as
 
 **`results/<experiment_id>.parquet`** (long format, one row per measure): `experiment_id, cell_key, engine, cluster, hardware_manifest_hash, config_hash, mode, unit_id, measure, measure_unit, direction, n, median, p95, cv, cv_flag, ratio, ci_low, ci_high, correctness (pass|fail|not_checked), timeouts`.
 
+**`cell_key` and `config_hash`** (16 hex characters each): the first 16 hex digits of the SHA-256 of canonical JSON (sorted keys, version `v: 1`). `config_hash` covers the workload (without `units`) and one resolved configuration (`spark_conf` and `sweep` values as the strings Apache Spark receives, so `true` and `"true"` are equal); it is the same for every engine and cluster, which is what pairs cells. `cell_key` covers engine, cluster name and settings, `config_hash` and mode.
+
 **`datasets/<dataset_id>.json`** (dataset manifest; a copy sits next to the data as `_dataset.json`): `{format: "velocia-dataset", version: 1, dataset_id, suite, label, generator, generator_version, generator_params, seed, scale, data_format, compression, row_group_size, location, tables: [{name, rows, checksum, files: [{path, bytes}]}], files, bytes, checksum, created_at, velocia_version}`. `dataset_id` is `<suite>-sf<scale>-<data_format>`. Checksums are over the data content (rows rendered with column names), so the same data has the same checksum in any format or compression. Schema: `schemas/dataset-manifest.schema.json`.
 
 **Report JSON:** `{format: "velocia-report", version: 1, experiment, dataset, hardware_manifests, cross_hardware, measures, results: [...], flags: [...]}`.

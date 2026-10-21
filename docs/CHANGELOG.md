@@ -1,5 +1,9 @@
 # Spec changelog
 
+## 2026-10-21 — cell keys and config hashes (T07)
+
+- Defined `cell_key` and `config_hash` (04 §6). `velocia run --dry-run` prints cells, run count (cells × repetitions, plus one correctness pass per cell) and a rough duration with a worst case at the per-unit timeout; it fails on engines not in the registry.
+
 ## 2026-10-21 — dataset manifest (T06)
 
 - Dataset manifest format v1 defined (04 §6) with `schemas/dataset-manifest.schema.json`. Data lives in `<results_dir>/data/<dataset_id>/<table>/` unless `--out` is given.
