@@ -8,6 +8,7 @@ against the reference engine are computed at the end.
 """
 
 import hashlib
+import json
 import subprocess
 from collections import defaultdict
 from collections.abc import Callable
@@ -35,6 +36,9 @@ from velocia.datagen.manifest import DatasetManifest
 from velocia.engines.docker import inspect_image
 from velocia.engines.registry import Engine, load_engines
 from velocia.experiment.expander import DEFAULT_CLUSTER, Cell, expand, stable_hash
+from velocia.families.spark.eventlog.reader import EventLogError
+from velocia.families.spark.eventlog.summary import UnitSummary
+from velocia.families.spark.eventlog.summary import summarize as summarize_log
 from velocia.families.spark.package import DriverPackage, build_driver
 from velocia.hardware.probe import hardware_manifest_hash, probe_local
 from velocia.measures.builtins import BUILTINS, ClusterInputs, Measure, UnitInputs
@@ -320,7 +324,7 @@ class Orchestrator:
                 "run", {"run_id": run_id},
                 {"status": result.status, "app_id": app_id, "manifest_json": as_json(manifest)},
             )  # fmt: skip
-            self._record_outputs(catalog, cell, app, result, output)
+            self._record_outputs(catalog, cell, app, result, output, run_dir)
             self._progress(cell, total, app, result, output)
         catalog.update(
             "cell", {"experiment_id": experiment_id, "cell_key": cell.cell_key},
@@ -388,15 +392,24 @@ class Orchestrator:
         }
 
     def _record_outputs(
-        self, catalog: Catalog, cell: Cell, app: AppSpec, result: AppResult, output: dict[str, Any]
+        self,
+        catalog: Catalog,
+        cell: Cell,
+        app: AppSpec,
+        result: AppResult,
+        output: dict[str, Any],
+        run_dir: Path,
     ) -> None:
         reported = output.get("units", [])
         if app.task == "time":
+            summaries = self._summaries(run_dir)
             rows = [
                 {
                     "run_id": app.run_id, "unit_id": u["unit_id"], "rep": u["rep"],
                     "wall_ms": u["wall_ms"], "status": u["status"], "discarded": u["discarded"],
                     "error": u.get("error"),
+                    "summary": as_json(summaries[(u["unit_id"], u["rep"])].as_dict())
+                    if (u["unit_id"], u["rep"]) in summaries else None,
                 }
                 for u in reported
             ]  # fmt: skip
@@ -409,7 +422,7 @@ class Orchestrator:
                         rows.append({
                             "run_id": app.run_id, "unit_id": unit["id"], "rep": rep,
                             "wall_ms": None, "status": status, "discarded": rep == 0,
-                            "error": f"application {result.status}",
+                            "error": f"application {result.status}", "summary": None,
                         })  # fmt: skip
             catalog.insert_many("unit_run", rows)
         else:
@@ -424,6 +437,17 @@ class Orchestrator:
                 }
                 for unit in app.units
             ])  # fmt: skip
+
+    def _summaries(self, run_dir: Path) -> dict[tuple[str, int], UnitSummary]:
+        """Per-unit event-log summaries of a run; empty when its log is missing or unreadable."""
+        log_dir = run_dir / "eventlog"
+        if not log_dir.is_dir():
+            return {}
+        try:
+            return summarize_log(log_dir).units
+        except EventLogError as exc:
+            self.echo(f"warning: {run_dir.name}: event log unreadable: {exc}")
+            return {}
 
     def _progress(
         self, cell: Cell, total: int, app: AppSpec, result: AppResult, output: dict[str, Any]
@@ -492,7 +516,11 @@ def compute_results(
             timeouts[(ur["cell_key"], ur["unit_id"])] += 1
             timeouts[(ur["cell_key"], TOTAL_UNIT)] += 1
         wall_s = ur["wall_ms"] / 1000 if ur["status"] == "ok" else None
-        inputs = UnitInputs(wall_s=wall_s)
+        telemetry = json.loads(ur["summary"]) if ur.get("summary") else None
+        inputs = UnitInputs(
+            wall_s=wall_s,
+            telemetry=UnitSummary(**telemetry).telemetry() if telemetry else {},
+        )
         for m in prepared.measures:
             value, reason = m.compute(inputs, cluster_inputs[ur["cell_key"]])
             mv_rows.append({

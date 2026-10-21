@@ -77,6 +77,12 @@ Edit `tpch-vanilla-vs-comet.yaml`: `repetitions`, `modes: [cold, warm]`, `units:
 
 `velocia run ... --resume` continues an interrupted experiment from the first unfinished cell.
 
+- **task_cpu_time** comes from Spark's event logs. It counts Spark task threads only; Comet
+  does much of its work on native threads that Spark doesn't see, so Comet's CPU time is
+  understated and the report says so.
+- **Plan markers** show how many SQL plan operators ran on Comet and how often the plan
+  switches between columnar and row format (a fallback indicator).
+
 ## Not in this demo yet
 
-Event-log measures (`task_cpu_time` etc.), the HTML report, Kubernetes and external clusters.
+The HTML report, custom formula measures, Kubernetes and external clusters.

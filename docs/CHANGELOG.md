@@ -1,5 +1,9 @@
 # Spec changelog
 
+## 2026-10-21 — event-log measures (T12/T13)
+
+- Event-log measures (`task_cpu_time`, `task_run_time`, `gc_time`, `shuffle_bytes`, `spill_bytes`) and `throughput_rows`/`throughput_bytes` now have values. Report JSON gains `plan_markers` (04 §6); the catalog's `unit_run` gains a `summary` column with the per-unit event-log summary (03 §7).
+
 ## 2026-10-21 — run outputs (T09-T19, local demo path)
 
 - Defined `timings.json`, `checks.json`, `manifest.json`, the unit tag uses (warm-up rep 0, correctness `-1`, `_setup`), the `_total` unit and the report JSON fields (04 §6). `velocia run` (local runner) and `velocia report --format md|json` work; `--format html` follows with T21.

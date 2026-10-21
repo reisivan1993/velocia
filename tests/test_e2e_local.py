@@ -28,7 +28,7 @@ engines: [spark-vanilla, spark-comet]
 reference_engine: spark-vanilla
 cluster: {{runner: local, executors: 1, executor_cores: 2, executor_memory: 2g}}
 spark_conf: {{spark.hadoop.fs.s3a.secret.key: "{secret}"}}
-measures: [wall_time, cost_usd]
+measures: [wall_time, task_cpu_time, throughput_rows, cost_usd]
 repetitions: {reps}
 modes: {modes}
 timeout_per_unit: 5m
@@ -70,6 +70,14 @@ def test_full_pipeline(
     ]  # fmt: skip
     assert len(comet_totals) == 2  # cold and warm
     assert all(r["correctness"] == "pass" and r["n"] == 2 for r in comet_totals)
+
+    cpu = [r for r in report["results"] if r["measure"] == "task_cpu_time"]
+    assert cpu and all(r["n"] == 2 for r in cpu)
+    markers = report["plan_markers"]
+    by_engine = {c["engine"]: markers[c["cell_key"]] for c in report["cells"]}
+    assert by_engine["spark-vanilla"]["accelerated"] == 0
+    assert by_engine["spark-comet"]["accelerated"] > 0
+    assert any("task_cpu_time counts Spark task threads only" in f for f in report["flags"])
 
     runs = sorted((results / "runs").iterdir())
     assert len(runs) == 2 * (2 + 1) + 2 * (1 + 1)  # cold: reps + check; warm: 1 app + check

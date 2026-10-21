@@ -29,7 +29,9 @@ CREATE TABLE IF NOT EXISTS run (
     app_id VARCHAR, status VARCHAR, manifest_json VARCHAR);
 CREATE TABLE IF NOT EXISTS unit_run (
     run_id VARCHAR, unit_id VARCHAR, rep INTEGER, wall_ms DOUBLE, status VARCHAR,
-    discarded BOOLEAN, error VARCHAR);
+    discarded BOOLEAN, error VARCHAR, summary VARCHAR);
+-- Catalogs created before event-log summaries existed (2026-10-21).
+ALTER TABLE unit_run ADD COLUMN IF NOT EXISTS summary VARCHAR;
 CREATE TABLE IF NOT EXISTS unit_check (
     run_id VARCHAR, cell_key VARCHAR, unit_id VARCHAR, rows BIGINT, checksum VARCHAR,
     status VARCHAR, error VARCHAR);

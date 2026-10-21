@@ -109,7 +109,7 @@ custom:                 # free-form coefficients for custom measures, exposed as
 
 **`_total` unit:** results include a `_total` row per cell and measure: the sum over all units of one repetition, only for repetitions where every unit finished. Its correctness is `fail` if any unit failed, `not_checked` if any was not checked, else `pass`. It is the headline comparison.
 
-**Report JSON:** `{format: "velocia-report", version: 1, experiment, dataset, label, hardware_manifests, cross_hardware, cells, measures, results: [...], flags: [...]}`. `reports/<experiment_id>/report.json` and `report.md` are written at the end of every run. The experiment spec in the catalog and reports is stored redacted.
+**Report JSON:** `{format: "velocia-report", version: 1, experiment, dataset, label, hardware_manifests, cross_hardware, cells, measures, results: [...], plan_markers: {cell_key: {operators, accelerated, transitions}}, flags: [...]}`. `reports/<experiment_id>/report.json` and `report.md` are written at the end of every run. The experiment spec in the catalog and reports is stored redacted.
 
 ## 7. Benchmark bundle format v1
 

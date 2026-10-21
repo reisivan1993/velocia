@@ -43,6 +43,7 @@ def build_report(catalog: Catalog, experiment_id: str) -> dict[str, Any]:
         [experiment_id],
     )
     manifests = [json.loads(r["manifest_json"]) for r in runs if r["manifest_json"]]
+    cells_by_key = {c["cell_key"]: c for c in cells}
     hardware: dict[str, Any] = {}
     mode_labels: dict[str, set[str]] = {}
     for m in manifests:
@@ -72,6 +73,15 @@ def build_report(catalog: Catalog, experiment_id: str) -> dict[str, Any]:
                 f"host slept {m['host_slept_s']:.0f}s during {m['run_id']}: its timings are "
                 "unreliable; rerun the experiment"
             )
+    markers = _plan_markers(catalog, experiment_id)
+    accelerated = sorted({cells_by_key[k]["engine"] for k, m in markers.items() if m["accelerated"]
+                          and k in cells_by_key})  # fmt: skip
+    if accelerated and "task_cpu_time" in spec_measures(spec):
+        flags.append(
+            "task_cpu_time counts Spark task threads only; native work that "
+            f"{', '.join(accelerated)} runs on other threads is not included, so its CPU "
+            "ratios overstate the advantage"
+        )
     if spec.get("repetitions", 5) < 5:
         flags.append("fewer than 5 repetitions: confidence intervals are wide")
 
@@ -112,8 +122,31 @@ def build_report(catalog: Catalog, experiment_id: str) -> dict[str, Any]:
         ],
         "measures": spec_measures(spec),
         "results": results,
+        "plan_markers": markers,
         "flags": flags,
     }
+
+
+def _plan_markers(catalog: Catalog, experiment_id: str) -> dict[str, dict[str, Any]]:
+    """Per cell, from its first timed repetition: operators, accelerated ones, transitions."""
+    rows = catalog.query(
+        "SELECT r.cell_key, u.unit_id, u.rep, u.summary FROM unit_run u JOIN run r USING (run_id) "
+        "WHERE r.experiment_id = ? AND NOT u.discarded AND u.summary IS NOT NULL "
+        "AND u.unit_id != '_setup' ORDER BY u.rep",
+        [experiment_id],
+    )
+    out: dict[str, dict[str, Any]] = {}
+    first_rep: dict[str, int] = {}
+    for row in rows:
+        rep = first_rep.setdefault(row["cell_key"], row["rep"])
+        if row["rep"] != rep:
+            continue
+        summary = json.loads(row["summary"])
+        m = out.setdefault(row["cell_key"], {"operators": 0, "accelerated": 0, "transitions": 0})
+        m["operators"] += summary["plan_operators"]
+        m["accelerated"] += summary["plan_accelerated"]
+        m["transitions"] += summary["plan_transitions"]
+    return out
 
 
 def spec_measures(spec: dict[str, Any]) -> list[str]:
@@ -226,6 +259,26 @@ def render_markdown(report: dict[str, Any]) -> str:
                     f"{_num(r['median'], unit)} | {ratio_text(r)} | {cv} | {r['correctness']} |"
                 )
             out.append("")
+    markers = report.get("plan_markers") or {}
+    if markers:
+        out += [
+            "## Plan markers",
+            "",
+            "From each engine's first timed repetition, all units: operators in the final SQL "
+            "plans, how many ran on an accelerator, and row/columnar transitions (fallbacks).",
+            "",
+            "| engine | mode | operators | accelerated | transitions |",
+            "| --- | --- | ---: | ---: | ---: |",
+        ]
+        for key, cell in cells.items():
+            m = markers.get(key)
+            if m:
+                share = m["accelerated"] / m["operators"] if m["operators"] else 0
+                out.append(
+                    f"| {cell['engine']} | {cell['mode_label']} | {m['operators']} | "
+                    f"{m['accelerated']} ({share:.0%}) | {m['transitions']} |"
+                )
+        out.append("")
     if report["flags"]:
         out += ["## Flags", ""] + [f"- {f}" for f in report["flags"]]
     out += ["", "## Hardware", ""]

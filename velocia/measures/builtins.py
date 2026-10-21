@@ -58,6 +58,19 @@ def _telemetry(key: str, scale: float = 1.0) -> Callable[[UnitInputs, ClusterInp
     return compute
 
 
+def _throughput(key: str) -> Callable[[UnitInputs, ClusterInputs], Value]:
+    def compute(u: UnitInputs, c: ClusterInputs) -> Value:
+        if u.wall_s is None:
+            return None, "unit did not finish"
+        if key not in u.telemetry:
+            return None, f"event-log input {key} not available"
+        if u.wall_s <= 0:
+            return None, "wall time is zero"
+        return u.telemetry[key] / u.wall_s, None
+
+    return compute
+
+
 def _node_hours(u: UnitInputs, c: ClusterInputs) -> Value:
     if u.wall_s is None:
         return None, "unit did not finish"
@@ -101,6 +114,8 @@ BUILTINS: dict[str, Measure] = {
         Measure("gc_time", "s", LOWER, _telemetry("gc_s")),
         Measure("shuffle_bytes", "bytes", LOWER, _telemetry("shuffle_bytes")),
         Measure("spill_bytes", "bytes", LOWER, _telemetry("spill_bytes")),
+        Measure("throughput_rows", "rows/s", HIGHER, _throughput("input_rows")),
+        Measure("throughput_bytes", "bytes/s", HIGHER, _throughput("input_bytes")),
         Measure("node_hours", "node·h", LOWER, _node_hours),
         Measure("accelerator_hours", "device·h", LOWER, _accelerator_hours),
         Measure("cost_usd", "USD", LOWER, _cost),
