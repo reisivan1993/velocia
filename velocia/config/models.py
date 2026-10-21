@@ -252,6 +252,7 @@ class Mode(StrEnum):
 
 
 RECOMMENDED_MIN_REPETITIONS = 5
+DEFAULT_CLUSTER = "default"  # name of the cluster given with `cluster:` instead of `clusters:`
 
 
 class Experiment(StrictModel):
@@ -274,6 +275,13 @@ class Experiment(StrictModel):
     @property
     def engine_refs(self) -> list[EngineRef]:
         return [EngineRef(name=e) if isinstance(e, str) else e for e in self.engines]
+
+    @property
+    def named_clusters(self) -> dict[str, "Cluster"]:
+        """``clusters``, or the single ``cluster`` under the name ``default``."""
+        if self.cluster is not None:
+            return {DEFAULT_CLUSTER: self.cluster}
+        return dict(self.clusters or {})
 
     @property
     def timeout(self) -> timedelta:

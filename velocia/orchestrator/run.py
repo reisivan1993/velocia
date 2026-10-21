@@ -37,7 +37,7 @@ from velocia.datagen.manifest import DatasetManifest, results_label
 from velocia.datagen.tera import tera_dataset_id
 from velocia.engines.docker import inspect_image
 from velocia.engines.registry import Engine, load_engines
-from velocia.experiment.expander import DEFAULT_CLUSTER, Cell, expand, stable_hash
+from velocia.experiment.expander import Cell, expand, spark_value, stable_hash
 from velocia.families.spark.eventlog.reader import EventLogError
 from velocia.families.spark.eventlog.summary import UnitSummary
 from velocia.families.spark.eventlog.summary import summarize as summarize_log
@@ -47,7 +47,7 @@ from velocia.measures.builtins import ClusterInputs, Measure, UnitInputs
 from velocia.measures.formula import parse, unknown_hw_inputs
 from velocia.measures.registry import load_measures
 from velocia.runners.base import AppResult, AppSpec
-from velocia.runners.local import LocalRunner, keep_awake
+from velocia.runners.local import LocalRunner, container_memory_mb, keep_awake
 from velocia.stats.summary import ratio_ci, summarize
 from velocia.store.catalog import Catalog, as_json
 from velocia.workloads import Unit, UnknownUnitError, get_workload, select_units
@@ -117,9 +117,7 @@ def prepare(path: Path, config: VelociaConfig) -> Prepared:
             f"unknown measure(s): {', '.join(missing)} (available: {', '.join(available)})"
         )
 
-    clusters: dict[str, Cluster] = experiment.clusters or {}
-    if experiment.cluster is not None:
-        clusters = {DEFAULT_CLUSTER: experiment.cluster}
+    clusters = experiment.named_clusters
     for name, cluster in clusters.items():
         if not isinstance(cluster, LocalCluster):
             raise RunError(f"cluster {name!r}: only the local runner is available so far")
@@ -134,6 +132,7 @@ def prepare(path: Path, config: VelociaConfig) -> Prepared:
                 raise RunError(str(exc)) from exc
 
     check_hardware(experiment, profiles, [available[m] for m in experiment.measures])
+    warnings += memory_warnings(experiment, known, clusters)
 
     for measure in [available[m] for m in experiment.measures]:
         if measure.formula is None:
@@ -177,6 +176,40 @@ def prepare(path: Path, config: VelociaConfig) -> Prepared:
         profiles=profiles,
         warnings=[*experiment.warnings(), *warnings],
     )
+
+
+MEMORY_HEADROOM = 0.85  # of Docker's memory; the rest is for the VM and other containers
+
+
+def memory_warnings(
+    experiment: Experiment,
+    engines: dict[str, Engine],
+    clusters: dict[str, Cluster],
+    docker_memory_gib: float | None = None,
+) -> list[str]:
+    """Cells whose container likely needs more memory than Docker can give it."""
+    if docker_memory_gib is None:
+        docker = probe_local()["node_types"][0].get("docker") or {}
+        docker_memory_gib = docker.get("memory_gib")
+    if not docker_memory_gib:
+        return []
+    out = []
+    for ref in experiment.engine_refs:
+        cluster = clusters[ref.cluster or next(iter(clusters))]
+        if not isinstance(cluster, LocalCluster):
+            continue
+        conf = {**engines[ref.name].definition.spark_conf}
+        conf.update(
+            {k: spark_value(v) for k, v in experiment.spark_conf.items() if not isinstance(v, list)}
+        )
+        need_gib = container_memory_mb(cluster, conf) / 1024
+        if need_gib > docker_memory_gib * MEMORY_HEADROOM:
+            out.append(
+                f"{ref.name} needs about {need_gib:.1f} GiB per container (heap, off-heap, "
+                f"overhead) but Docker has {docker_memory_gib:.0f} GiB; expect out-of-memory "
+                "kills. Give Docker more memory or lower executor_memory"
+            )
+    return out
 
 
 NORMALIZED_MEASURES = frozenset({"cost_usd", "node_hours", "accelerator_hours", "energy_kwh"})
@@ -500,6 +533,7 @@ class Orchestrator:
             "velocia_git_sha": _git_sha(),
             "quiet_check": {"ok": not quiet_reasons, "reasons": quiet_reasons},
             "host_slept_s": result.host_slept_s,
+            "notes": result.notes,
             "measures": [m.describe() for m in self.p.measures],
             "label": results_label(self.p.dataset.label),
         }
@@ -597,6 +631,8 @@ class Orchestrator:
             line += f" — application {result.status}"
         if result.host_slept_s:
             line += f" — WARNING: host slept {result.host_slept_s:.0f}s, timings unreliable"
+        for note in result.notes:
+            line += f" — {note}"
         self.echo(line)
 
 

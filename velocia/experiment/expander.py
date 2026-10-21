@@ -31,7 +31,6 @@ from velocia.config.models import (
     Workload,
 )
 
-DEFAULT_CLUSTER = "default"  # name of the cluster given with `cluster:` instead of `clusters:`
 HASH_VERSION = 1
 HASH_HEX_CHARS = 16
 
@@ -84,9 +83,7 @@ def expand(experiment: Experiment) -> list[Cell]:
 
     Engines are innermost so that the cells being compared run close together in time.
     """
-    clusters: dict[str, Cluster] = experiment.clusters or {}
-    if experiment.cluster is not None:
-        clusters = {DEFAULT_CLUSTER: experiment.cluster}
+    clusters = experiment.named_clusters
     cells: list[Cell] = []
     for config in expand_configs(experiment):
         for mode in experiment.modes:

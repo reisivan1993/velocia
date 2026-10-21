@@ -81,6 +81,8 @@ def build_report(catalog: Catalog, experiment_id: str) -> dict[str, Any]:
         if reasons:
             flags.append(f"quiet check flagged for {c['engine']} {c['mode']}: {'; '.join(reasons)}")
     for m in manifests:
+        for note in m.get("notes") or []:
+            flags.append(f"{m['run_id']}: {note}")
         if m.get("host_slept_s"):
             flags.append(
                 f"host slept {m['host_slept_s']:.0f}s during {m['run_id']}: its timings are "

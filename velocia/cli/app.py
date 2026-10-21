@@ -24,7 +24,7 @@ from velocia.experiment.estimate import estimate, format_duration
 from velocia.experiment.expander import expand
 from velocia.measures.formula import HW_STANDARD, parse
 from velocia.measures.registry import load_measure_file, load_measures
-from velocia.orchestrator.run import Orchestrator, RunError, prepare
+from velocia.orchestrator.run import Orchestrator, RunError, memory_warnings, prepare
 from velocia.report.build import (
     ReportError,
     build_report,
@@ -187,7 +187,8 @@ def run(
         except UnknownUnitError as exc:
             _fail(str(exc))
     if dry_run:
-        for warning in spec.warnings():
+        warnings = [*spec.warnings(), *memory_warnings(spec, known, spec.named_clusters)]
+        for warning in warnings:
             typer.echo(f"warning: {warning}", err=True)
         _print_dry_run(spec)
         return

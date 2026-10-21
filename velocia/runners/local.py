@@ -34,8 +34,22 @@ TERAGEN_OUTPUT = "teragen-data"  # inside the work dir
 
 
 def _memory_mb(size: str) -> int:
+    if size.isdigit():  # plain bytes
+        return int(size) // (1024 * 1024)
     factor = {"k": 1 / 1024, "m": 1, "g": 1024, "t": 1024 * 1024}[size[-1]]
     return int(int(size[:-1]) * factor)
+
+
+OOM_KILLED = 137  # SIGKILL, from the kernel's out-of-memory killer
+JVM_OVERHEAD_MB = 1024  # metaspace, threads, Python driver and native buffers
+
+
+def container_memory_mb(cluster: LocalCluster, spark_conf: dict[str, str]) -> int:
+    """Rough memory one application container needs: heap, off-heap, overhead."""
+    total = _memory_mb(driver_memory(cluster)) + JVM_OVERHEAD_MB
+    if spark_conf.get("spark.memory.offHeap.enabled", "false").lower() == "true":
+        total += _memory_mb(spark_conf.get("spark.memory.offHeap.size", "0m").lower() or "0m")
+    return total
 
 
 def driver_memory(cluster: LocalCluster) -> str:
@@ -260,10 +274,16 @@ class LocalRunner:
             timer.cancel()
             self._remove(name)
         status: AppStatus = "finished"
+        notes: list[str] = []
         if timed_out.is_set():
             status = "timeout"
         elif exit_code != 0:
             status = "failed"
+            if exit_code == OOM_KILLED:
+                notes.append(
+                    "killed (exit 137): out of memory; the container needed more than Docker "
+                    "could give it. Give Docker more memory or lower executor_memory"
+                )
         ended = time.time()
         return AppResult(
             status=status,
@@ -274,6 +294,7 @@ class LocalRunner:
             ended_at=ended,
             cache_dropped=cache_dropped,
             host_slept_s=host_slept_s(started, ended, started_mono, time.monotonic()),
+            notes=notes,
         )
 
     def _remove(self, name: str) -> None:

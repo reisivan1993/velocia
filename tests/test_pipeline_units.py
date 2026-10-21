@@ -421,3 +421,28 @@ def test_cross_hardware_needs_the_override_and_a_normalized_measure() -> None:
         [wall],
         probe,
     )
+
+
+def test_memory_warning_and_container_estimate() -> None:
+    from velocia.config.models import Experiment
+    from velocia.engines.registry import load_engines
+    from velocia.orchestrator.run import memory_warnings
+    from velocia.runners.local import container_memory_mb
+
+    cluster = LocalCluster(runner="local", executors=1, executor_cores=4, executor_memory="4g")
+    comet_conf = {"spark.memory.offHeap.enabled": "true", "spark.memory.offHeap.size": "2g"}
+    assert container_memory_mb(cluster, {}) == 4096 + 1024
+    assert container_memory_mb(cluster, comet_conf) == 4096 + 2048 + 1024
+    experiment = Experiment.model_validate(
+        {
+            "name": "x",
+            "workload": {"kind": "sql", "suite": "tpch", "scale_factor": 10},
+            "engines": ["spark-vanilla", "spark-comet"],
+            "reference_engine": "spark-vanilla",
+            "cluster": cluster.model_dump(),
+        }
+    )
+    engines = load_engines()
+    warnings = memory_warnings(experiment, engines, {"default": cluster}, docker_memory_gib=8)
+    assert len(warnings) == 1 and warnings[0].startswith("spark-comet needs about 7.0 GiB")
+    assert memory_warnings(experiment, engines, {"default": cluster}, docker_memory_gib=16) == []
