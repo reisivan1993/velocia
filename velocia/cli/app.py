@@ -4,6 +4,7 @@ v0.1 commands only (docs/04-interfaces.md §1). Each command is a stub until its
 lands; stubs exit with code 2 and name the task, so nothing pretends to work.
 """
 
+import json
 from enum import StrEnum
 from pathlib import Path
 from typing import Annotated, NoReturn
@@ -17,6 +18,15 @@ from velocia.engines.docker import DockerError, build_image, inspect_image
 from velocia.engines.registry import get_engine, load_engines
 from velocia.experiment.estimate import estimate, format_duration
 from velocia.experiment.expander import expand
+from velocia.orchestrator.run import Orchestrator, RunError, prepare
+from velocia.report.build import (
+    ReportError,
+    build_report,
+    headline_lines,
+    render_markdown,
+    write_reports,
+)
+from velocia.store.catalog import Catalog
 from velocia.workloads import UnknownUnitError, get_workload, select_units
 
 app = typer.Typer(
@@ -155,11 +165,29 @@ def run(
             select_units(workload, spec.workload.units)
         except UnknownUnitError as exc:
             _fail(str(exc))
-    for warning in spec.warnings():
-        typer.echo(f"warning: {warning}", err=True)
-    if not dry_run:
-        _not_implemented("T15")
-    _print_dry_run(spec)
+    if dry_run:
+        for warning in spec.warnings():
+            typer.echo(f"warning: {warning}", err=True)
+        _print_dry_run(spec)
+        return
+    config = _config()
+    out_dir = results_dir or Path(config.results_dir)
+    try:
+        prepared = prepare(experiment, config)
+        experiment_id = Orchestrator(prepared, config, out_dir, echo=typer.echo).run(resume)
+    except RunError as exc:
+        _fail(str(exc))
+    with Catalog(out_dir) as catalog:
+        doc = build_report(catalog, experiment_id)
+    dest = write_reports(doc, out_dir)
+    typer.echo("")
+    typer.echo(f"Experiment {experiment_id} finished. {doc['label'] or ''}")
+    for line in headline_lines(doc):
+        typer.echo(f"  {line}")
+    for flag in doc["flags"]:
+        typer.echo(f"  flag: {flag}")
+    typer.echo(f"Report: {dest / 'report.md'}")
+    typer.echo(f"Results: {out_dir / 'results' / (experiment_id + '.parquet')}")
 
 
 def _print_dry_run(spec: models.Experiment) -> None:
@@ -206,7 +234,24 @@ def report(
     measures: Annotated[str | None, typer.Option(help="Comma-separated measures to show.")] = None,
 ) -> None:
     """Show results with confidence intervals and correctness."""
-    _not_implemented("T19")
+    if report_format is ReportFormat.html:
+        _not_implemented("T21")
+    with Catalog(Path(_config().results_dir)) as catalog:
+        try:
+            doc = build_report(catalog, experiment_id)
+        except ReportError as exc:
+            _fail(str(exc))
+    if measures:
+        wanted = [m.strip() for m in measures.split(",") if m.strip()]
+        unknown = [m for m in wanted if m not in doc["measures"]]
+        if unknown:
+            _fail(f"measure(s) not in this experiment: {', '.join(unknown)}")
+        doc["measures"] = wanted
+        doc["results"] = [r for r in doc["results"] if r["measure"] in wanted]
+    if report_format is ReportFormat.json:
+        typer.echo(json.dumps(doc, indent=2, default=str))
+    else:
+        typer.echo(render_markdown(doc))
 
 
 @app.command()
@@ -280,3 +325,7 @@ def hardware_probe(
 
 def main() -> None:
     app()
+
+
+if __name__ == "__main__":
+    main()

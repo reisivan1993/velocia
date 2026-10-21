@@ -99,7 +99,17 @@ custom:                 # free-form coefficients for custom measures, exposed as
 
 **`datasets/<dataset_id>.json`** (dataset manifest; a copy sits next to the data as `_dataset.json`): `{format: "velocia-dataset", version: 1, dataset_id, suite, label, generator, generator_version, generator_params, seed, scale, data_format, compression, row_group_size, location, tables: [{name, rows, checksum, files: [{path, bytes}]}], files, bytes, checksum, created_at, velocia_version}`. `dataset_id` is `<suite>-sf<scale>-<data_format>`. Checksums are over the data content (rows rendered with column names), so the same data has the same checksum in any format or compression. Schema: `schemas/dataset-manifest.schema.json`.
 
-**Report JSON:** `{format: "velocia-report", version: 1, experiment, dataset, hardware_manifests, cross_hardware, measures, results: [...], flags: [...]}`.
+**`runs/<run_id>/timings.json`** (driver output, version 1): `{format: "velocia-timings", version, run_id, mode, started_at, finished_at, spark: {version, master, app_id, app_name, default_parallelism, executors, executor_cores, plugins, python}, units: [{unit_id, rep, tag, discarded, status (ok|failed|timeout), wall_ms, started_at, error}]}`. Rep 0 is the discarded warm-up of warm mode. Rewritten after every unit.
+
+**`runs/<run_id>/checks.json`** (correctness pass, version 1): `{format: "velocia-checks", version, run_id, float_round_decimals, spark, units: [{unit_id, tag, rows, checksum, status, error}]}`.
+
+**`runs/<run_id>/manifest.json`** (version 1): `{format: "velocia-run-manifest", version, run_id, experiment_id, cell_key, config_hash, task (time|check), mode, mode_label ("cold (cache not dropped)" where the page cache was not dropped), reps, warmup, status, exit_code, started_at, ended_at, family, engine: {name, image, image_id, repo_digests, architecture}, spark, spark_conf (redacted), cluster (redacted), hardware, hardware_manifest_hash, dataset_id, dataset_checksum, units, driver_sha256, velocia_version, velocia_git_sha, quiet_check, label}`.
+
+**Unit tags:** `velocia:<run_id>:<unit_id>:<rep>`; rep 0 is the warm-up, `-1` the correctness pass, and unit `_setup` tags table registration before the first unit, so every Spark job carries a tag.
+
+**`_total` unit:** results include a `_total` row per cell and measure: the sum over all units of one repetition, only for repetitions where every unit finished. Its correctness is `fail` if any unit failed, `not_checked` if any was not checked, else `pass`. It is the headline comparison.
+
+**Report JSON:** `{format: "velocia-report", version: 1, experiment, dataset, label, hardware_manifests, cross_hardware, cells, measures, results: [...], flags: [...]}`. `reports/<experiment_id>/report.json` and `report.md` are written at the end of every run. The experiment spec in the catalog and reports is stored redacted.
 
 ## 7. Benchmark bundle format v1
 

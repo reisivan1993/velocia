@@ -1,5 +1,9 @@
 # Spec changelog
 
+## 2026-10-21 — run outputs (T09-T19, local demo path)
+
+- Defined `timings.json`, `checks.json`, `manifest.json`, the unit tag uses (warm-up rep 0, correctness `-1`, `_setup`), the `_total` unit and the report JSON fields (04 §6). `velocia run` (local runner) and `velocia report --format md|json` work; `--format html` follows with T21.
+
 ## 2026-10-21 — cell keys and config hashes (T07)
 
 - Defined `cell_key` and `config_hash` (04 §6). `velocia run --dry-run` prints cells, run count (cells × repetitions, plus one correctness pass per cell) and a rough duration with a worst case at the per-unit timeout; it fails on engines not in the registry.

@@ -17,3 +17,19 @@ Decisions made while executing the plan. Spec-level decisions (D-1 … D-13) are
 - **Checked:** all 22 queries give the same rows on Apache Spark 3.5.9 (vanilla image, `local[4]`) and on DuckDB over the same SF0.1 Parquet files.
 - **Spike — `velocia datagen --suite tpcds --sf 10`** (DuckDB 1.5.6, macOS arm64, 14 cores, 48 GB): 2 min, 24 tables, 2.5 GB Parquet zstd. Peak RSS 11.3 GB with DuckDB's default memory limit (80% of RAM); 6.5 GB with `memory_limit = '4GB'` (dsdgen allocates outside DuckDB's buffer manager). Same checksum in both runs.
 - **Decision:** no Spark-side TPC-DS generator for v0.1. Laptop SF10 needs about 7 GB of free memory; document that in the quickstart (T26). The cluster-side generator stays the fallback for SF100 and up.
+
+## 2026-10-21 — T09-T19: decisions taken on the way to a local end-to-end demo
+
+The user asked to keep going until a local demo runs, so the execution path was built in one stretch: driver (T09), local runner (T10), manifest and built-in probe (T11), correctness pass (T14, in the driver), orchestrator (T15), built-in measures (T16, without formula measures), statistics (T17), store and Markdown/JSON reports (T19).
+
+- **Local runner = one container per application, Spark `local[N]`** with N = executors x executor_cores, `--cpus N`; the driver JVM gets all executor memory (`spark.driver.memory`). A standalone cluster inside Docker adds little for one machine.
+- **Raw outputs never touch the results directory:** Spark writes event logs and driver JSON to a temporary directory; the collector streams them through redaction into `runs/<run_id>/`. Checked on a real Apache Spark 3.5 event log: deny-list matches only occur inside property maps, so whole events can be redacted without damaging the log structure. The experiment YAML is stored redacted too (an end-to-end planted-secret test caught it raw in the catalog).
+- **Every job is tagged:** table registration (Parquet footer reads) runs as unit `_setup`; the correctness pass uses rep `-1`.
+- **Per-unit timeout in the driver** cancels the unit's job group from a watchdog thread; the runner has an app-level timeout as well. Units an application never reached are recorded as failed or timeout, never dropped.
+- **Correctness** is compared per (config_hash, mode) against the reference engine's cell; the reference's own units are `pass` when its check ran.
+- **`_total` unit** (sum over units per repetition) gives the headline speedup as a ratio of medians with a CI.
+- **Bootstrap seed** derived from the experiment ID, plus a stable per-series offset; recorded in the catalog and the report.
+- **Quiet check (local):** other Velocia containers running, and host 1-minute load average as % of CPUs vs `quiet_check.max_cpu_pct`. It flags, never blocks. On macOS the load average includes Docker Desktop and is often above 10%; the threshold may need a macOS-specific default.
+- **Cold mode on macOS** is labeled "cold (cache not dropped)"; the page cache is dropped only on Linux hosts (privileged container).
+- **Docker Desktop memory:** the VM on the dev machine has 8 GB; demo cells use 1 x 4 cores x 3g.
+- **Not done yet:** event-log measures (T12/T13: `task_cpu_time` and friends are `null` with a reason), formula and plugin measures, HTML report (T21), `k8s`/`external` runners, the full-size bootstrap coverage test (a reduced one runs on every PR).

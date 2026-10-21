@@ -12,7 +12,7 @@ from velocia.workloads import Unit
 QUERIES_DIR = Path(str(files("velocia.workloads.sql")))
 
 
-def _natural_key(unit_id: str) -> list[int | str]:
+def natural_key(unit_id: str) -> list[int | str]:
     return [int(part) if part.isdigit() else part for part in re.split(r"(\d+)", unit_id)]
 
 
@@ -30,7 +30,7 @@ class SqlWorkload:
     kind: WorkloadKind = WorkloadKind.sql
 
     def units(self, dataset: DatasetManifest | None = None) -> list[Unit]:
-        paths = sorted(self.directory.glob("*.sql"), key=lambda p: _natural_key(p.stem))
+        paths = sorted(self.directory.glob("*.sql"), key=lambda p: natural_key(p.stem))
         return [Unit(id=p.stem, kind=self.kind, sql=read_sql(p)) for p in paths]
 
 
