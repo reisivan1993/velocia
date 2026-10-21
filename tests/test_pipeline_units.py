@@ -268,3 +268,25 @@ def test_compute_results_correctness_ratios_and_total(tmp_path: Path) -> None:
     assert total["ratio"] == 2.0
     assert rows[("spark-vanilla", "q1")]["correctness"] == "pass"
     assert rows[("spark-vanilla", "q1")]["ratio"] is None  # the reference has no ratio
+
+
+def test_host_sleep_is_detected_from_clock_gap() -> None:
+    from velocia.runners.local import host_slept_s
+
+    assert host_slept_s(100.0, 160.0, 5.0, 65.0) == 0.0  # clocks agree
+    assert host_slept_s(100.0, 160.0, 5.0, 64.0) == 0.0  # within tolerance
+    assert host_slept_s(100.0, 4900.0, 5.0, 65.0) == 4740.0  # 79 min asleep
+
+
+def test_keep_awake_on_macos() -> None:
+    import sys
+
+    from velocia.runners.local import keep_awake
+
+    proc = keep_awake()
+    if sys.platform != "darwin":
+        assert proc is None
+        return
+    assert proc is not None and proc.poll() is None
+    proc.terminate()
+    proc.wait(timeout=5)

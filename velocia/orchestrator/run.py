@@ -39,7 +39,7 @@ from velocia.families.spark.package import DriverPackage, build_driver
 from velocia.hardware.probe import hardware_manifest_hash, probe_local
 from velocia.measures.builtins import BUILTINS, ClusterInputs, Measure, UnitInputs
 from velocia.runners.base import AppResult, AppSpec
-from velocia.runners.local import LocalRunner
+from velocia.runners.local import LocalRunner, keep_awake
 from velocia.stats.summary import ratio_ci, summarize
 from velocia.store.catalog import Catalog, as_json
 from velocia.workloads import Unit, UnknownUnitError, get_workload, select_units
@@ -164,6 +164,14 @@ class Orchestrator:
     # --- run ------------------------------------------------------------------------------
 
     def run(self, resume: bool = False) -> str:
+        awake = keep_awake()
+        try:
+            return self._run(resume)
+        finally:
+            if awake is not None:
+                awake.terminate()
+
+    def _run(self, resume: bool) -> str:
         exp = self.p.experiment
         with Catalog(self.results_dir) as catalog:
             existing = catalog.latest_unfinished(exp.name, self.p.spec_hash) if resume else None
@@ -375,6 +383,7 @@ class Orchestrator:
             "velocia_version": __version__,
             "velocia_git_sha": _git_sha(),
             "quiet_check": {"ok": not quiet_reasons, "reasons": quiet_reasons},
+            "host_slept_s": result.host_slept_s,
             "label": f"{self.p.dataset.label}; not an official TPC result",
         }
 
@@ -428,6 +437,8 @@ class Orchestrator:
         line = f"[{cell.index}/{total}] {cell.label} {what}: {ok}/{len(units)} ok, {secs:.0f}s"
         if result.status != "finished":
             line += f" — application {result.status}"
+        if result.host_slept_s:
+            line += f" — WARNING: host slept {result.host_slept_s:.0f}s, timings unreliable"
         self.echo(line)
 
 

@@ -66,6 +66,12 @@ def build_report(catalog: Catalog, experiment_id: str) -> dict[str, Any]:
         reasons = json.loads(c["quiet_check"] or "[]")
         if reasons:
             flags.append(f"quiet check flagged for {c['engine']} {c['mode']}: {'; '.join(reasons)}")
+    for m in manifests:
+        if m.get("host_slept_s"):
+            flags.append(
+                f"host slept {m['host_slept_s']:.0f}s during {m['run_id']}: its timings are "
+                "unreliable; rerun the experiment"
+            )
     if spec.get("repetitions", 5) < 5:
         flags.append("fewer than 5 repetitions: confidence intervals are wide")
 

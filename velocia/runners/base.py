@@ -38,6 +38,7 @@ class AppResult:
     started_at: float
     ended_at: float
     cache_dropped: bool
+    host_slept_s: float = 0.0  # wall-clock time the host spent asleep during the application
     notes: list[str] = field(default_factory=list)
 
 

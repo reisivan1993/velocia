@@ -94,6 +94,29 @@ def driver_spec(app: AppSpec) -> dict[str, object]:
     }
 
 
+SLEEP_TOLERANCE_S = 2.0
+
+
+def host_slept_s(wall_start: float, wall_end: float, mono_start: float, mono_end: float) -> float:
+    """Seconds the host slept: on macOS the monotonic clock stops during sleep, wall time not.
+
+    On Linux the monotonic clock also stops in suspend, so the same check holds there.
+    """
+    gap = (wall_end - wall_start) - (mono_end - mono_start)
+    return round(gap, 1) if gap > SLEEP_TOLERANCE_S else 0.0
+
+
+def keep_awake() -> subprocess.Popen[bytes] | None:
+    """Hold off idle sleep while Velocia runs (macOS ``caffeinate``); None elsewhere.
+
+    A sleeping host pauses the Docker VM in the middle of timed units. Closing a laptop lid
+    still sleeps it; that case is detected per application instead (``host_slept_s``).
+    """
+    if sys.platform != "darwin" or shutil.which("caffeinate") is None:
+        return None
+    return subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())])
+
+
 def cpu_busy_pct(interval_s: float = 1.0) -> float | None:
     """Share of all CPUs busy over ``interval_s``; None where it can't be measured."""
     if sys.platform == "linux":
@@ -186,6 +209,7 @@ class LocalRunner:
         timer = threading.Timer(app.app_timeout_s, on_timeout)
         timer.daemon = True
         started = time.time()
+        started_mono = time.monotonic()
         self._containers.add(name)
         try:
             proc = subprocess.Popen(
@@ -205,14 +229,16 @@ class LocalRunner:
             status = "timeout"
         elif exit_code != 0:
             status = "failed"
+        ended = time.time()
         return AppResult(
             status=status,
             exit_code=exit_code,
             work_dir=work_dir,
             log_tail="\n".join(tail),
             started_at=started,
-            ended_at=time.time(),
+            ended_at=ended,
             cache_dropped=cache_dropped,
+            host_slept_s=host_slept_s(started, ended, started_mono, time.monotonic()),
         )
 
     def _remove(self, name: str) -> None:
