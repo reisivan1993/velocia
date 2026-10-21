@@ -26,13 +26,26 @@ name: e2e
 workload: {{kind: sql, suite: tpch, scale_factor: 0.01, units: [q1, q3, q6, q13]}}
 engines: [spark-vanilla, spark-comet]
 reference_engine: spark-vanilla
-cluster: {{runner: local, executors: 1, executor_cores: 2, executor_memory: 2g}}
+cluster: {{runner: local, executors: 1, executor_cores: 2, executor_memory: 2g,
+          hardware_profile: laptop}}
 spark_conf: {{spark.hadoop.fs.s3a.secret.key: "{secret}"}}
-measures: [wall_time, task_cpu_time, throughput_rows, cost_usd]
+measures: [wall_time, task_cpu_time, throughput_rows, cost_usd, vendor_cu]
 repetitions: {reps}
 modes: {modes}
 timeout_per_unit: 5m
 """
+
+
+def _measure_and_profile(root: Path) -> None:
+    (root / "measures").mkdir()
+    (root / "measures" / "vendor_cu.yaml").write_text(
+        "name: vendor_cu\nunit: CU\ndirection: lower\n"
+        "formula: unit.wall_s / 3600 * cluster.nodes * hw.cu_per_node_hour\n"
+    )
+    (root / "hardware").mkdir()
+    (root / "hardware" / "laptop.yaml").write_text(
+        "name: laptop\nprice_per_node_hour_usd: 0.1\ncustom: {cu_per_node_hour: 2.0}\n"
+    )
 
 
 def _velocia_containers() -> list[str]:
@@ -52,6 +65,7 @@ def test_full_pipeline(
     (tmp_path / "exp.yaml").write_text(
         EXPERIMENT.format(secret="PLANTED-SECRET-e2e", reps=2, modes="[cold, warm]")
     )
+    _measure_and_profile(tmp_path)
     result = cli.invoke(app, ["run", "exp.yaml"])
     assert result.exit_code == 0, result.output
     assert "spark-comet vs spark-vanilla (cold (cache not dropped))" in result.output
@@ -71,6 +85,12 @@ def test_full_pipeline(
     assert len(comet_totals) == 2  # cold and warm
     assert all(r["correctness"] == "pass" and r["n"] == 2 for r in comet_totals)
 
+    by_key = {(r["engine"], r["mode"], r["unit_id"], r["measure"]): r for r in report["results"]}
+    wall = by_key[("spark-comet", "cold", "q1", "wall_time")]
+    cu = by_key[("spark-comet", "cold", "q1", "vendor_cu")]
+    assert cu["n"] == 2 and cu["median"] == pytest.approx(wall["median"] / 3600 * 2.0)
+    assert cu["ci_low"] is not None
+    assert any(d["name"] == "vendor_cu" and d["formula"] for d in report["measure_definitions"])
     cpu = [r for r in report["results"] if r["measure"] == "task_cpu_time"]
     assert cpu and all(r["n"] == 2 for r in cpu)
     markers = report["plan_markers"]
@@ -111,6 +131,7 @@ def test_interrupt_leaves_no_containers(tmp_path: Path) -> None:
         cwd=tmp_path, check=True, capture_output=True, env=env,
     )  # fmt: skip
     (tmp_path / "exp.yaml").write_text(EXPERIMENT.format(secret="x", reps=5, modes="[cold]"))
+    _measure_and_profile(tmp_path)
     proc = subprocess.Popen(
         [sys.executable, "-m", "velocia.cli.app", "run", "exp.yaml"],
         cwd=tmp_path, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

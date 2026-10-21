@@ -18,6 +18,8 @@ from velocia.engines.docker import DockerError, build_image, inspect_image
 from velocia.engines.registry import get_engine, load_engines
 from velocia.experiment.estimate import estimate, format_duration
 from velocia.experiment.expander import expand
+from velocia.measures.formula import HW_STANDARD, parse
+from velocia.measures.registry import load_measure_file, load_measures
 from velocia.orchestrator.run import Orchestrator, RunError, prepare
 from velocia.report.build import (
     ReportError,
@@ -306,13 +308,32 @@ def engines_check(
 @measures_app.command("list")
 def measures_list() -> None:
     """List built-in and custom measures."""
-    _not_implemented("T16")
+    try:
+        measures = load_measures(Path(_config().measures_dir))
+    except ConfigError as exc:
+        _fail(str(exc))
+    for m in measures.values():
+        what = m.formula if m.formula else "built-in"
+        typer.echo(f"{m.name:20} {m.unit:16} {m.direction.value:7} {what}")
 
 
 @measures_app.command("check")
 def measures_check(file: Annotated[Path, typer.Argument(help="Measure YAML.")]) -> None:
     """Validate a measure formula against the input catalog."""
-    _not_implemented("T16")
+    try:
+        measure = load_measure_file(file, match_file_name=False)
+    except ConfigError as exc:
+        _fail(str(exc))
+    assert measure.formula is not None
+    formula = parse(measure.formula)
+    typer.echo(f"{measure.name}: ok ({measure.unit}, {measure.direction.value} is better)")
+    typer.echo(f"  inputs: {', '.join(sorted(formula.inputs))}")
+    custom_hw = [i for i in formula.inputs if i.startswith("hw.") and i[3:] not in HW_STANDARD]
+    if custom_hw:
+        typer.echo(
+            f"  {', '.join(sorted(custom_hw))}: custom coefficient(s); every hardware profile "
+            "used with this measure needs them under custom:, or values are null"
+        )
 
 
 @hardware_app.command("probe")

@@ -24,6 +24,7 @@ class ClusterInputs:
     executor_cores: int
     profile: HardwareProfile | None
     default_node_hour_usd: float
+    executor_memory_gb: float | None = None
 
     @classmethod
     def of(
@@ -31,7 +32,15 @@ class ClusterInputs:
     ) -> "ClusterInputs":
         # local: one machine; k8s and external: one executor per node (v0.1 assumption).
         nodes = 1 if cluster.runner == "local" else cluster.executors
-        return cls(nodes, cluster.executors, cluster.executor_cores, profile, default_price)
+        memory_gb = _memory_gb(cluster.executor_memory)
+        return cls(
+            nodes, cluster.executors, cluster.executor_cores, profile, default_price, memory_gb
+        )
+
+
+def _memory_gb(size: str) -> float:
+    factor = {"k": 1 / 1024**2, "m": 1 / 1024, "g": 1.0, "t": 1024.0}[size[-1]]
+    return int(size[:-1]) * factor
 
 
 Value = tuple[float | None, str | None]  # (value, reason when None)
@@ -43,6 +52,15 @@ class Measure:
     unit: str
     direction: Direction
     compute: Callable[[UnitInputs, ClusterInputs], Value]
+    source: str = "built-in"  # or the definition file
+    formula: str | None = None
+    definition_sha256: str | None = None
+
+    def describe(self) -> dict[str, str | None]:
+        return {
+            "name": self.name, "unit": self.unit, "direction": self.direction.value,
+            "source": self.source, "formula": self.formula, "sha256": self.definition_sha256,
+        }  # fmt: skip
 
 
 def _wall(u: UnitInputs, c: ClusterInputs) -> Value:

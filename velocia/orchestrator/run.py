@@ -41,7 +41,9 @@ from velocia.families.spark.eventlog.summary import UnitSummary
 from velocia.families.spark.eventlog.summary import summarize as summarize_log
 from velocia.families.spark.package import DriverPackage, build_driver
 from velocia.hardware.probe import hardware_manifest_hash, probe_local
-from velocia.measures.builtins import BUILTINS, ClusterInputs, Measure, UnitInputs
+from velocia.measures.builtins import ClusterInputs, Measure, UnitInputs
+from velocia.measures.formula import parse, unknown_hw_inputs
+from velocia.measures.registry import load_measures
 from velocia.runners.base import AppResult, AppSpec
 from velocia.runners.local import LocalRunner, keep_awake
 from velocia.stats.summary import ratio_ci, summarize
@@ -66,6 +68,7 @@ class Prepared:
     dataset: DatasetManifest
     measures: list[Measure]
     profiles: dict[str, HardwareProfile | None]  # by cluster name
+    warnings: list[str]
 
 
 def _git_sha() -> str | None:
@@ -84,6 +87,7 @@ def _git_sha() -> str | None:
 
 def prepare(path: Path, config: VelociaConfig) -> Prepared:
     """Validate everything that can be checked before the first application starts."""
+    warnings: list[str] = []
     try:
         experiment = load_model(path, Experiment)
     except ConfigError as exc:
@@ -99,10 +103,14 @@ def prepare(path: Path, config: VelociaConfig) -> Prepared:
         units = select_units(workload, experiment.workload.units)
     except UnknownUnitError as exc:
         raise RunError(str(exc)) from exc
-    missing = [m for m in experiment.measures if m not in BUILTINS]
+    try:
+        available = load_measures(Path(config.measures_dir))
+    except ConfigError as exc:
+        raise RunError(str(exc)) from exc
+    missing = [m for m in experiment.measures if m not in available]
     if missing:
         raise RunError(
-            f"unknown measure(s): {', '.join(missing)} (custom measures are not supported yet)"
+            f"unknown measure(s): {', '.join(missing)} (available: {', '.join(available)})"
         )
 
     clusters: dict[str, Cluster] = experiment.clusters or {}
@@ -120,6 +128,16 @@ def prepare(path: Path, config: VelociaConfig) -> Prepared:
                 profiles[name] = load_model(profile_path, HardwareProfile)
             except ConfigError as exc:
                 raise RunError(str(exc)) from exc
+
+    for measure in [available[m] for m in experiment.measures]:
+        if measure.formula is None:
+            continue
+        unknown_hw = unknown_hw_inputs(parse(measure.formula), list(profiles.values()))
+        if unknown_hw:
+            warnings.append(
+                f"measure {measure.name}: {', '.join(unknown_hw)} is in no hardware profile of "
+                "this experiment; its values will be null"
+            )
 
     wl = experiment.workload
     if wl.dataset_id:
@@ -146,8 +164,9 @@ def prepare(path: Path, config: VelociaConfig) -> Prepared:
         engines={r.name: known[r.name] for r in experiment.engine_refs},
         units=units,
         dataset=dataset,
-        measures=[BUILTINS[m] for m in experiment.measures],
+        measures=[available[m] for m in experiment.measures],
         profiles=profiles,
+        warnings=[*experiment.warnings(), *warnings],
     )
 
 
@@ -202,7 +221,7 @@ class Orchestrator:
             done = catalog.done_cells(experiment_id)
             driver = build_driver(self.results_dir / "drivers")
             hardware = probe_local()  # the local runner's node; profiles added per cluster
-            for warning in exp.warnings():
+            for warning in self.p.warnings:
                 self.echo(f"warning: {warning}")
             for cell in cells:
                 if cell.cell_key in done:
@@ -388,6 +407,7 @@ class Orchestrator:
             "velocia_git_sha": _git_sha(),
             "quiet_check": {"ok": not quiet_reasons, "reasons": quiet_reasons},
             "host_slept_s": result.host_slept_s,
+            "measures": [m.describe() for m in self.p.measures],
             "label": f"{self.p.dataset.label}; not an official TPC result",
         }
 

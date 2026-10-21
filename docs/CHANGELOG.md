@@ -1,5 +1,9 @@
 # Spec changelog
 
+## 2026-10-21 — formula measures (T16)
+
+- Formula measures from `measures_dir` work in runs; `velocia measures list|check` implemented. Formula grammar (03 §6) made precise: numbers, `+ - * / // % **` (exponent at most 100), unary `-`/`+`, `min`/`max`/`abs`, inputs `unit.*`, `cluster.*` (`nodes`, `executors`, `executor_cores`, `executor_memory_gb`), `hw.*` (profile fields and `custom` coefficients). A measure file's name must match its `name` when loaded from `measures_dir`; a custom measure can't reuse a built-in name. Manifests list every measure with its definition hash (`measures`, `host_slept_s` added to 04 §6); the report adds `measure_definitions`.
+
 ## 2026-10-21 — event-log measures (T12/T13)
 
 - Event-log measures (`task_cpu_time`, `task_run_time`, `gc_time`, `shuffle_bytes`, `spill_bytes`) and `throughput_rows`/`throughput_bytes` now have values. Report JSON gains `plan_markers` (04 §6); the catalog's `unit_run` gains a `summary` column with the per-unit event-log summary (03 §7).

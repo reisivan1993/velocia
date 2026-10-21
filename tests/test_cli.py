@@ -29,7 +29,6 @@ def test_version() -> None:
         ["report", "exp-1", "--format", "html"],
         ["doctor"],
         ["engines", "check", "spark-vanilla", "--spark", "3.5"],
-        ["measures", "check", "m.yaml"],
         ["hardware", "probe"],
     ],
 )

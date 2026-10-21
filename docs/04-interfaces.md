@@ -103,13 +103,13 @@ custom:                 # free-form coefficients for custom measures, exposed as
 
 **`runs/<run_id>/checks.json`** (correctness pass, version 1): `{format: "velocia-checks", version, run_id, float_round_decimals, spark, units: [{unit_id, tag, rows, checksum, status, error}]}`.
 
-**`runs/<run_id>/manifest.json`** (version 1): `{format: "velocia-run-manifest", version, run_id, experiment_id, cell_key, config_hash, task (time|check), mode, mode_label ("cold (cache not dropped)" where the page cache was not dropped), reps, warmup, status, exit_code, started_at, ended_at, family, engine: {name, image, image_id, repo_digests, architecture}, spark, spark_conf (redacted), cluster (redacted), hardware, hardware_manifest_hash, dataset_id, dataset_checksum, units, driver_sha256, velocia_version, velocia_git_sha, quiet_check, label}`.
+**`runs/<run_id>/manifest.json`** (version 1): `{format: "velocia-run-manifest", version, run_id, experiment_id, cell_key, config_hash, task (time|check), mode, mode_label ("cold (cache not dropped)" where the page cache was not dropped), reps, warmup, status, exit_code, started_at, ended_at, family, engine: {name, image, image_id, repo_digests, architecture}, spark, spark_conf (redacted), cluster (redacted), hardware, hardware_manifest_hash, dataset_id, dataset_checksum, units, driver_sha256, velocia_version, velocia_git_sha, quiet_check, host_slept_s, measures: [{name, unit, direction, source, formula, sha256}], label}`.
 
 **Unit tags:** `velocia:<run_id>:<unit_id>:<rep>`; rep 0 is the warm-up, `-1` the correctness pass, and unit `_setup` tags table registration before the first unit, so every Spark job carries a tag.
 
 **`_total` unit:** results include a `_total` row per cell and measure: the sum over all units of one repetition, only for repetitions where every unit finished. Its correctness is `fail` if any unit failed, `not_checked` if any was not checked, else `pass`. It is the headline comparison.
 
-**Report JSON:** `{format: "velocia-report", version: 1, experiment, dataset, label, hardware_manifests, cross_hardware, cells, measures, results: [...], plan_markers: {cell_key: {operators, accelerated, transitions}}, flags: [...]}`. `reports/<experiment_id>/report.json` and `report.md` are written at the end of every run. The experiment spec in the catalog and reports is stored redacted.
+**Report JSON:** `{format: "velocia-report", version: 1, experiment, dataset, label, hardware_manifests, cross_hardware, cells, measures, results: [...], measure_definitions, plan_markers: {cell_key: {operators, accelerated, transitions}}, flags: [...]}`. `reports/<experiment_id>/report.json` and `report.md` are written at the end of every run. The experiment spec in the catalog and reports is stored redacted.
 
 ## 7. Benchmark bundle format v1
 

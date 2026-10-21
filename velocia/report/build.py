@@ -122,6 +122,7 @@ def build_report(catalog: Catalog, experiment_id: str) -> dict[str, Any]:
         ],
         "measures": spec_measures(spec),
         "results": results,
+        "measure_definitions": next((m["measures"] for m in manifests if m.get("measures")), []),
         "plan_markers": markers,
         "flags": flags,
     }
@@ -229,12 +230,20 @@ def render_markdown(report: dict[str, Any]) -> str:
 
     cells = {c["cell_key"]: c for c in report["cells"]}
     results = report["results"]
+    definitions = {d["name"]: d for d in report.get("measure_definitions") or []}
     for measure in report["measures"]:
         rows = [r for r in results if r["measure"] == measure]
         if not rows:
             continue
         unit = rows[0]["measure_unit"]
         out += ["", f"## {measure} ({unit}, {rows[0]['direction']} is better)", ""]
+        definition = definitions.get(measure)
+        if definition and definition.get("formula"):
+            out += [
+                f"Custom measure from `{definition['source']}`: `{definition['formula']}` "
+                f"(definition {str(definition['sha256'])[:19]}).",
+                "",
+            ]
         if all(r["n"] == 0 for r in rows):
             out.append("No values: this measure's inputs are not available yet.")
             continue

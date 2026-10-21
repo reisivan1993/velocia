@@ -223,7 +223,7 @@ def test_compute_results_correctness_ratios_and_total(tmp_path: Path) -> None:
     cells = expand(experiment)
     ref, cand = cells
     prepared = Prepared(experiment, "", "h", {}, [Unit("q1", "sql"), Unit("q2", "sql")],  # type: ignore[arg-type]
-                        None, [BUILTINS["wall_time"]], {"default": None})  # type: ignore[arg-type]  # fmt: skip
+                        None, [BUILTINS["wall_time"]], {"default": None}, [])  # type: ignore[arg-type]  # fmt: skip
     with Catalog(tmp_path) as cat:
         cat.insert("experiment", {"experiment_id": "e", "bootstrap_seed": 1})
         for cell in cells:
