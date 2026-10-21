@@ -129,6 +129,8 @@ def prepare(path: Path, config: VelociaConfig) -> Prepared:
             except ConfigError as exc:
                 raise RunError(str(exc)) from exc
 
+    check_hardware(experiment, profiles, [available[m] for m in experiment.measures])
+
     for measure in [available[m] for m in experiment.measures]:
         if measure.formula is None:
             continue
@@ -168,6 +170,38 @@ def prepare(path: Path, config: VelociaConfig) -> Prepared:
         profiles=profiles,
         warnings=[*experiment.warnings(), *warnings],
     )
+
+
+NORMALIZED_MEASURES = frozenset({"cost_usd", "node_hours", "accelerator_hours", "energy_kwh"})
+
+
+def check_hardware(
+    experiment: Experiment,
+    profiles: dict[str, HardwareProfile | None],
+    measures: list[Measure],
+    probe: Callable[[HardwareProfile | None], dict[str, Any]] = probe_local,
+) -> None:
+    """Refuse a cross-hardware comparison unless the experiment asks for it (03 §5).
+
+    With ``comparison.allow_cross_hardware``, at least one normalized measure (cost, node-hours,
+    accelerator-hours, energy or a custom formula) must sit next to time.
+    """
+    used = {ref.cluster or next(iter(profiles)) for ref in experiment.engine_refs}
+    hashes = {name: hardware_manifest_hash(probe(profiles[name])) for name in sorted(used)}
+    if len(set(hashes.values())) <= 1:
+        return
+    if not experiment.comparison.allow_cross_hardware:
+        raise RunError(
+            "engines run on different hardware (clusters "
+            f"{', '.join(sorted(hashes))} have different hardware manifests); results are only "
+            "compared within one hardware manifest. To compare anyway, set "
+            "comparison.allow_cross_hardware: true and add a normalized measure such as cost_usd"
+        )
+    if not any(m.name in NORMALIZED_MEASURES or m.formula for m in measures):
+        raise RunError(
+            "a cross-hardware comparison needs at least one normalized measure next to time "
+            "(cost_usd, node_hours, accelerator_hours, energy_kwh or a custom formula)"
+        )
 
 
 class Orchestrator:
@@ -494,8 +528,10 @@ def _correctness(
 ) -> str:
     mine = checks.get(cell_key, {}).get(unit)
     ref = checks.get(ref_key, {}).get(unit) if ref_key else None
+    if mine is not None and mine["status"] == "failed":
+        return "fail"  # the query errors on this engine
     if mine is None or ref is None or mine["status"] != "ok" or ref["status"] != "ok":
-        return "fail" if mine is not None and mine["status"] != "ok" else "not_checked"
+        return "not_checked"  # missing, timed out, or no usable reference
     same = mine["rows"] == ref["rows"] and mine["checksum"] == ref["checksum"]
     return "pass" if same else "fail"
 

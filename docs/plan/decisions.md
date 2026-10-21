@@ -48,3 +48,10 @@ The user asked to keep going until a local demo runs, so the execution path was 
 - **SVG drawn by Velocia, no chart library:** one self-contained file, works offline, nothing third-party to vendor or keep patched; a 99-unit x 3-engine report is well under 10 MB (test).
 - **Chart form:** per candidate cell and measure, a dot-and-whisker chart on a log x-axis (ratio and 95% CI per unit, reference line at 1x), hover tooltips via SVG `<title>`, the table behind it in a collapsible section. A failed unit shows a red cross and "FAILED", never a ratio. Colors from the dataviz reference palette (single series: slot 1; status colors with icon + label), light and dark tokens.
 - **Flags:** high-variation flags are grouped per engine/mode/unit, listing the measures (cost is proportional to wall time, so they always moved together).
+
+## 2026-10-21 — T22/T23: doctor, engine check, planted faults
+
+- **Engine check** runs in `<results_dir>/_checks` (own catalog), q1/q3/q6 at SF0.01 vs `spark-vanilla`. A broken engine (missing plugin class) fails it.
+- **Planted faults** use a test-only image (`tests/fixtures/engines/spark-faulty`): vanilla plus a Python `.pth` startup hook (Ubuntu's own `sitecustomize.py` shadows a custom one) that wraps `SparkSession.sql` per `spark.velocia.test.fault`: `wrong` (results cut to one row), `noisy` (random 0-1.5 s sleep), `slow` (a Spark job far beyond the timeout). All three are reported as specified; cross-hardware is a unit test; unsorted job output waits for TeraSort (T18).
+- **Found on the way:** the correctness pass had no timeout, so a hanging query would have blocked a run forever; it now uses the same job-group watchdog (`guarded()` in the driver). A check that times out is `not_checked`, not `fail`.
+- **Cross-hardware rule enforced** before any application starts, comparing `hardware_manifest_hash` per used cluster (hardware profile accelerators count; prices don't).

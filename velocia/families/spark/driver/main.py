@@ -18,9 +18,10 @@ import json
 import os
 import sys
 import time
+from functools import partial
 from typing import Any
 
-from .units import Unit, run_units, tag
+from .units import Unit, guarded, run_units, tag
 
 TIMINGS_FORMAT = "velocia-timings"
 CHECKS_FORMAT = "velocia-checks"
@@ -123,16 +124,18 @@ def checksum(spark: Any, sql: str, decimals: int) -> dict[str, Any]:
 def _check(spark: Any, spec: dict[str, Any], units: list[Unit], out_path: str) -> None:
     sc = spark.sparkContext
     decimals = int(spec.get("float_round_decimals", 4))
+    timeout_s = float(spec["timeout_s"])
     results = []
     for unit in units:
         unit_tag = tag(spec["run_id"], unit.id, -1)  # -1: correctness pass, never timed
-        sc.setJobGroup(unit_tag, unit_tag)
-        entry: dict[str, Any] = {"unit_id": unit.id, "tag": unit_tag}
-        try:
-            entry.update(checksum(spark, unit.sql, decimals), status="ok", error=None)
-        except Exception as exc:
-            entry.update(rows=None, checksum=None, status="failed",
-                         error=f"{type(exc).__name__}: {exc}"[:2000])  # fmt: skip
+        sc.setJobGroup(unit_tag, unit_tag, interruptOnCancel=True)
+        status, error, value = guarded(
+            unit_tag, timeout_s, partial(checksum, spark, unit.sql, decimals), sc.cancelJobGroup
+        )
+        entry: dict[str, Any] = {"unit_id": unit.id, "tag": unit_tag, "status": status,
+                                 "error": error, "rows": None, "checksum": None}  # fmt: skip
+        if value is not None:
+            entry.update(value)
         results.append(entry)
     _write_json(
         out_path,

@@ -290,3 +290,53 @@ def test_keep_awake_on_macos() -> None:
     assert proc is not None and proc.poll() is None
     proc.terminate()
     proc.wait(timeout=5)
+
+
+def test_cross_hardware_needs_the_override_and_a_normalized_measure() -> None:
+    from velocia.config.models import Experiment
+    from velocia.orchestrator.run import RunError, check_hardware
+
+    def probe(profile: HardwareProfile | None) -> dict[str, Any]:
+        accelerators = None
+        if profile is not None and profile.accelerators_per_node:
+            accelerators = {
+                "model": profile.accelerator_model,
+                "count": profile.accelerators_per_node,
+                "source": "declared",
+            }
+        node = {
+            "name": "local",
+            "count": 1,
+            "host": {"cpu_model": "M4"},
+            "docker": None,
+            "disk_type": None,
+            "accelerators": accelerators,
+            "source": "detected",
+        }
+        return {"node_types": [node]}
+
+    cpu = HardwareProfile(name="cpu")
+    apu = HardwareProfile(name="apu", accelerators_per_node=2, accelerator_model="apu-1")
+    local = {"runner": "local", "executors": 1, "executor_cores": 2, "executor_memory": "1g"}
+
+    def experiment(allow: bool) -> Experiment:
+        return Experiment.model_validate({
+            "name": "x", "workload": {"kind": "sql", "suite": "tpch", "scale_factor": 1},
+            "clusters": {"cpu": {**local, "hardware_profile": "cpu"},
+                         "apu": {**local, "hardware_profile": "apu"}},
+            "engines": [{"name": "spark-vanilla", "cluster": "cpu"},
+                        {"name": "spark-apu", "cluster": "apu"}],
+            "reference_engine": "spark-vanilla",
+            "comparison": {"allow_cross_hardware": allow},
+        })  # fmt: skip
+
+    profiles = {"cpu": cpu, "apu": apu}
+    wall, cost = BUILTINS["wall_time"], BUILTINS["cost_usd"]
+    with pytest.raises(RunError, match="different hardware"):
+        check_hardware(experiment(False), profiles, [wall, cost], probe)
+    with pytest.raises(RunError, match="normalized measure"):
+        check_hardware(experiment(True), profiles, [wall], probe)
+    check_hardware(experiment(True), profiles, [wall, cost], probe)
+    # Same hardware on both clusters (a price difference is not hardware): no objection.
+    check_hardware(experiment(False), {"cpu": cpu, "apu": HardwareProfile(name="apu",
+                   price_per_node_hour_usd=9)}, [wall], probe)  # fmt: skip

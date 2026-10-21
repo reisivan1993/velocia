@@ -1,5 +1,10 @@
 # Spec changelog
 
+## 2026-10-21 — planted faults and cross-hardware rule (T23)
+
+- `velocia run` refuses engines whose clusters have different hardware manifests unless `comparison.allow_cross_hardware: true`; with it, at least one normalized measure (cost, node-hours, accelerator-hours, energy or a custom formula) is required (03 §5, now enforced).
+- The correctness pass has the per-unit timeout too; a unit whose check timed out is `not_checked`, a unit whose query errors is `fail`.
+
 ## 2026-10-21 — doctor and engine check (T22)
 
 - `velocia doctor` checks Docker (CPUs, memory), engine images, free disk, DuckDB's tpch extension; exits 1 on a failing check. `velocia engines check <engine> [--spark V]` runs TPC-H-derived q1, q3, q6 at SF0.01 against `spark-vanilla` with correctness required, in `<results_dir>/_checks/`. The small TeraSort part of the smoke test follows T18; `--cluster` follows the external runner.

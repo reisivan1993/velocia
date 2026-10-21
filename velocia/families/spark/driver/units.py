@@ -7,6 +7,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from typing import Any
 
 TAG_FORMAT = "velocia:{run_id}:{unit_id}:{rep}"
@@ -21,6 +22,35 @@ class Unit:
 
 def tag(run_id: str, unit_id: str, rep: int) -> str:
     return TAG_FORMAT.format(run_id=run_id, unit_id=unit_id, rep=rep)
+
+
+def guarded(
+    unit_tag: str, timeout_s: float, fn: Callable[[], Any], cancel: Callable[[str], None]
+) -> tuple[str, str | None, Any]:
+    """Run ``fn`` with a watchdog that cancels the tag's jobs after ``timeout_s``.
+
+    Returns (status, error, value) with status ``ok``, ``failed`` or ``timeout``.
+    """
+    timed_out = threading.Event()
+
+    def on_timeout() -> None:
+        timed_out.set()
+        cancel(unit_tag)
+
+    timer = threading.Timer(timeout_s, on_timeout)
+    timer.daemon = True
+    timer.start()
+    value: Any = None
+    error: str | None = None
+    try:
+        value = fn()
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"[:2000]
+    finally:
+        timer.cancel()
+    if timed_out.is_set():
+        return "timeout", error, None
+    return ("failed" if error else "ok"), error, value
 
 
 def run_units(
@@ -43,28 +73,12 @@ def run_units(
     for rep in passes:
         for unit in units:
             unit_tag = tag(run_id, unit.id, rep)
-            timed_out = threading.Event()
-
-            def on_timeout(
-                unit_tag: str = unit_tag, timed_out: threading.Event = timed_out
-            ) -> None:
-                timed_out.set()
-                cancel(unit_tag)
-
-            timer = threading.Timer(timeout_s, on_timeout)
-            timer.daemon = True
-            error: str | None = None
             started_at = time.time()
             start = clock()
-            timer.start()
-            try:
-                execute(unit, unit_tag)
-            except Exception as exc:
-                error = f"{type(exc).__name__}: {exc}"[:2000]
-            finally:
-                timer.cancel()
+            status, error, _ = guarded(
+                unit_tag, timeout_s, partial(execute, unit, unit_tag), cancel
+            )
             wall_ms = (clock() - start) * 1000.0
-            status = "timeout" if timed_out.is_set() else ("failed" if error else "ok")
             on_result(
                 {
                     "unit_id": unit.id,
