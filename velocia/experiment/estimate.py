@@ -12,9 +12,11 @@ from velocia.config.models import Experiment, Mode, Suite
 from velocia.experiment.expander import Cell
 from velocia.workloads import get_workload
 
-APP_OVERHEAD_S = 30.0  # container or pod start plus Spark session start, per run
+APP_OVERHEAD_S = 15.0  # container or pod start plus Spark session start, per run
 MIN_UNIT_S = 1.0
-CORE_SECONDS_PER_UNIT_PER_SF = {Suite.tpch: 20.0, Suite.tpcds: 15.0}
+# TPC-H: vanilla Apache Spark 3.5 at SF1 took ~0.9 s per query on 4 cores (2026-10-21 demo);
+# rounded up because accelerators are faster and larger clusters scale imperfectly.
+CORE_SECONDS_PER_UNIT_PER_SF = {Suite.tpch: 5.0, Suite.tpcds: 5.0}
 CORE_SECONDS_PER_MILLION_ROWS = {Suite.tera: 6.0}
 
 

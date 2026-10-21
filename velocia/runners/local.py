@@ -12,6 +12,7 @@ reach, so cold runs there are labeled "cache not dropped" (D-5).
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -93,10 +94,37 @@ def driver_spec(app: AppSpec) -> dict[str, object]:
     }
 
 
+def cpu_busy_pct(interval_s: float = 1.0) -> float | None:
+    """Share of all CPUs busy over ``interval_s``; None where it can't be measured."""
+    if sys.platform == "linux":
+
+        def sample() -> tuple[int, int]:
+            with open("/proc/stat", encoding="utf-8") as f:
+                values = [int(v) for v in f.readline().split()[1:]]
+            idle = values[3] + (values[4] if len(values) > 4 else 0)  # idle + iowait
+            return idle, sum(values)
+
+        idle1, total1 = sample()
+        time.sleep(interval_s)
+        idle2, total2 = sample()
+        return 100.0 * (1 - (idle2 - idle1) / max(total2 - total1, 1))
+    if sys.platform == "darwin":
+        out = subprocess.run(
+            ["top", "-l", "2", "-s", str(max(1, round(interval_s))), "-n", "0"],
+            capture_output=True, text=True, check=False,
+        )  # fmt: skip
+        idle = re.findall(r"CPU usage:.*?([\d.]+)% idle", out.stdout)
+        return 100.0 - float(idle[-1]) if idle else None  # the second sample is the interval
+    return None
+
+
 class LocalRunner:
-    def __init__(self, cluster: LocalCluster, max_cpu_pct: float = 10.0) -> None:
+    def __init__(
+        self, cluster: LocalCluster, max_cpu_pct: float = 10.0, settle_s: float = 30.0
+    ) -> None:
         self.cluster = cluster
         self.max_cpu_pct = max_cpu_pct
+        self.settle_s = settle_s
         self._containers: set[str] = set()
 
     def check(self) -> list[str]:
@@ -120,9 +148,13 @@ class LocalRunner:
         others = [n for n in ps.stdout.split() if n]
         if others:
             reasons.append(f"other Velocia containers running: {', '.join(others)}")
-        load_pct = os.getloadavg()[0] / (os.cpu_count() or 1) * 100
-        if load_pct > self.max_cpu_pct:
-            reasons.append(f"host load {load_pct:.0f}% of CPUs > {self.max_cpu_pct:.0f}%")
+        # Give the previous application's load time to fade before judging the machine.
+        busy = cpu_busy_pct()
+        deadline = time.time() + self.settle_s
+        while busy is not None and busy > self.max_cpu_pct and time.time() < deadline:
+            busy = cpu_busy_pct()
+        if busy is not None and busy > self.max_cpu_pct:
+            reasons.append(f"host CPU {busy:.0f}% busy > {self.max_cpu_pct:.0f}%")
         return QuietCheck(ok=not reasons, reasons=reasons)
 
     def drop_page_cache(self, image: str) -> bool:
