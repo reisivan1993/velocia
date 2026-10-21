@@ -1,27 +1,81 @@
+# Velocia for Apache Spark CI (docs/05-quality-and-release.md §3, plan T24).
 name: ci
 
 on:
+  pull_request:
   push:
     branches: [main]
-  pull_request:
+  schedule:
+    - cron: "17 3 * * *"  # nightly
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python: ["3.11", "3.12", "3.13"]
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
-          python-version: ${{ matrix.python }}
+          python-version: "3.11"
       - run: uv sync --locked
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy
-      - run: uv run pytest
+      - run: uv run mypy --python-version 3.10 velocia/families/spark/driver
+      - run: uv run pytest -m "not docker and not slow"
+
+  integration:
+    # PR integration test: TPC-H-derived SF0.01 and a small TeraSort on Docker, full pipeline to
+    # the HTML report with one custom YAML measure, plus the planted faults.
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+      - run: uv sync --locked
+      - name: Build engine images
+        run: |
+          uv run velocia engines build spark-vanilla
+          uv run velocia engines build spark-comet
+      - name: Integration (target < 15 minutes)
+        run: >
+          uv run pytest -m docker
+          tests/test_e2e_local.py::test_full_pipeline
+          tests/test_planted_faults.py
+          tests/test_tera.py
+          tests/test_workloads.py
+
+  nightly:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+      - run: uv sync --locked
+      - name: Build engine images
+        run: |
+          uv run velocia engines build spark-vanilla
+          uv run velocia engines build spark-comet
+      - name: Engine smoke, kill test, image builds
+        run: >
+          uv run pytest -m docker
+          tests/test_doctor.py
+          tests/test_e2e_local.py::test_interrupt_leaves_no_containers
+          tests/test_engines.py
+      - name: Event-log reader benchmark (1 GB)
+        run: uv run pytest -m slow -s
