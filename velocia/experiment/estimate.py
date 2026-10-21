@@ -10,9 +10,7 @@ from datetime import timedelta
 
 from velocia.config.models import Experiment, Mode, Suite
 from velocia.experiment.expander import Cell
-
-# Until workload plugins (T08) list their units.
-KNOWN_UNIT_COUNTS = {Suite.tpch: 22, Suite.tpcds: 99}
+from velocia.workloads import get_workload
 
 APP_OVERHEAD_S = 30.0  # container or pod start plus Spark session start, per run
 MIN_UNIT_S = 1.0
@@ -34,7 +32,8 @@ def unit_count(experiment: Experiment) -> int | None:
     units = experiment.workload.units
     if isinstance(units, list):
         return len(units)
-    return KNOWN_UNIT_COUNTS.get(experiment.workload.suite)
+    workload = get_workload(experiment.workload.suite)
+    return None if workload is None else len(workload.units())
 
 
 def estimate(experiment: Experiment, cells: list[Cell]) -> Estimate:

@@ -17,6 +17,7 @@ from velocia.engines.docker import DockerError, build_image, inspect_image
 from velocia.engines.registry import get_engine, load_engines
 from velocia.experiment.estimate import estimate, format_duration
 from velocia.experiment.expander import expand
+from velocia.workloads import UnknownUnitError, get_workload, select_units
 
 app = typer.Typer(
     name="velocia",
@@ -148,6 +149,12 @@ def run(
     unknown = [ref.name for ref in spec.engine_refs if ref.name not in known]
     if unknown:
         _fail(f"unknown engine(s): {', '.join(unknown)} (known: {', '.join(known) or 'none'})")
+    workload = get_workload(spec.workload.suite)
+    if workload is not None:
+        try:
+            select_units(workload, spec.workload.units)
+        except UnknownUnitError as exc:
+            _fail(str(exc))
     for warning in spec.warnings():
         typer.echo(f"warning: {warning}", err=True)
     if not dry_run:
