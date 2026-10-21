@@ -140,7 +140,8 @@ velocia/                       # Python package
     driver/                    # PySpark driver program (shipped at submit time)
     eventlog/                  # streaming reader, per-unit aggregation, fallback markers
     checksum.py                # checksum SQL generation and rounding rules
-  engines/                     # registry; loads engines/*.yaml
+  engines/                     # registry; built-in definitions in engines/builtin/<name>.yaml with
+                               # Dockerfiles in engines/builtin/<name>/; user engines_dir overrides
   workloads/
     sql/tpch/, sql/tpcds/      # query files (generated text, never vendored kits)
     jobs/                      # job workload definitions (units, validators)
@@ -155,7 +156,6 @@ velocia/                       # Python package
   bundle/                      # export.py, schema/, validate.py
   ui/                          # v0.2: FastAPI app + built React assets
 jvm/velocia-jobs/              # sbt project: Velocia.unit helper, TeraSort, Sort, WordCount, PageRank
-engines/<name>/                # Dockerfile + <name>.yaml
 schemas/                       # published JSON Schemas (experiment, results, bundle)
 tests/                         # unit, golden, integration, planted faults
 docs/                          # spec, design, plan, user docs (MkDocs)
@@ -168,6 +168,8 @@ Dependency rule: `stats`, `measures`, `store`, `report`, `bundle` and `families/
 ### 5.1 Shipping the driver program (D-1)
 
 The driver program and `velocia-jobs` jar are **shipped at submit time** (`--py-files velocia-driver-<hash>.zip`, `--jars velocia-jobs_<scala>-<ver>.jar`), not baked into engine images. Engine images then hold only the engine, and the same driver runs on vendor clusters (`external`) whose images we can't change. The driver zip hash and jar hash go into the manifest (ADR-3).
+
+The driver program runs on the Python inside the engine image, not the CLI's Python. The official Spark 3.5 images ship Python 3.10, so `families/spark/driver/` targets Python 3.10, uses only PySpark and the standard library, and is type-checked and tested separately with `--python-version 3.10`.
 
 ### 5.2 Unit tagging and timing
 

@@ -29,7 +29,6 @@ def test_version() -> None:
         ["run", "exp.yaml"],
         ["report", "exp-1"],
         ["doctor"],
-        ["engines", "list"],
         ["engines", "check", "spark-vanilla", "--spark", "3.5"],
         ["measures", "check", "m.yaml"],
         ["hardware", "probe"],

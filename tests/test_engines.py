@@ -1,0 +1,49 @@
+import shutil
+from pathlib import Path
+
+import pytest
+
+from velocia.config import ConfigError
+from velocia.engines.docker import build_image, run_in_image
+from velocia.engines.registry import BUILTIN_DIR, get_engine, load_engines
+
+
+def test_builtin_vanilla_engine() -> None:
+    engine = get_engine("spark-vanilla")
+    assert engine.builtin
+    assert engine.definition.family == "spark"
+    assert engine.definition.spark_versions == ["3.5"]
+    assert engine.build_context == BUILTIN_DIR / "spark-vanilla"
+
+
+def test_user_definition_overrides_builtin(tmp_path: Path) -> None:
+    (tmp_path / "spark-vanilla.yaml").write_text(
+        "name: spark-vanilla\nimage: registry.example/spark:pinned\nspark_versions: ['3.5']\n"
+    )
+    engine = load_engines(tmp_path)["spark-vanilla"]
+    assert not engine.builtin
+    assert engine.definition.image == "registry.example/spark:pinned"
+
+
+def test_name_must_match_file(tmp_path: Path) -> None:
+    (tmp_path / "a.yaml").write_text("name: b\nimage: x:1\nspark_versions: ['3.5']\n")
+    with pytest.raises(ConfigError, match="must match the file name"):
+        load_engines(tmp_path)
+
+
+def test_unknown_engine() -> None:
+    with pytest.raises(KeyError, match="unknown engine 'nope'"):
+        get_engine("nope")
+
+
+@pytest.mark.docker
+@pytest.mark.skipif(shutil.which("docker") is None, reason="docker not available")
+def test_vanilla_image_builds_and_reports_spark_35() -> None:
+    engine = get_engine("spark-vanilla")
+    assert engine.build_context is not None
+    info = build_image(engine.build_context, engine.definition.image)
+    assert info.image_id.startswith("sha256:")
+    output = run_in_image(
+        engine.definition.image, "/opt/spark/bin/spark-submit", "--version", timeout=120
+    )
+    assert "version 3.5." in output

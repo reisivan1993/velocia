@@ -11,6 +11,9 @@ from typing import Annotated, NoReturn
 import typer
 
 from velocia import __version__
+from velocia.config import ConfigError, VelociaConfig, load_model
+from velocia.engines.docker import DockerError, build_image, inspect_image
+from velocia.engines.registry import get_engine, load_engines
 
 app = typer.Typer(
     name="velocia",
@@ -26,6 +29,7 @@ app.add_typer(measures_app, name="measures")
 app.add_typer(hardware_app, name="hardware")
 
 NOT_IMPLEMENTED_EXIT = 2
+CONFIG_FILE = Path("velocia.yaml")
 
 
 class Suite(StrEnum):
@@ -48,6 +52,24 @@ class ReportFormat(StrEnum):
 def _not_implemented(task: str) -> NoReturn:
     typer.echo(f"Not implemented yet (plan task {task}, docs/plan/01-v0.1-harness.md).", err=True)
     raise typer.Exit(NOT_IMPLEMENTED_EXIT)
+
+
+def _fail(message: str) -> NoReturn:
+    typer.echo(f"error: {message}", err=True)
+    raise typer.Exit(1)
+
+
+def _config() -> VelociaConfig:
+    if not CONFIG_FILE.is_file():
+        return VelociaConfig()
+    try:
+        return load_model(CONFIG_FILE, VelociaConfig)
+    except ConfigError as exc:
+        _fail(str(exc))
+
+
+def _user_engines_dir() -> Path:
+    return Path(_config().engines_dir)
 
 
 def _version_callback(value: bool) -> None:
@@ -113,13 +135,34 @@ def doctor() -> None:
 @engines_app.command("list")
 def engines_list() -> None:
     """List engine definitions."""
-    _not_implemented("T04")
+    try:
+        engines = load_engines(_user_engines_dir())
+    except ConfigError as exc:
+        _fail(str(exc))
+    for engine in engines.values():
+        d = engine.definition
+        source = "built-in" if engine.builtin else str(engine.source)
+        built = "built" if inspect_image(d.image) is not None else "not built"
+        versions = ",".join(d.spark_versions)
+        typer.echo(f"{d.name:<20} {d.family:<6} spark {versions:<8} {d.image}  [{built}; {source}]")
 
 
 @engines_app.command("build")
 def engines_build(name: Annotated[str, typer.Argument(help="Engine name.")]) -> None:
     """Build an engine image."""
-    _not_implemented("T04")
+    try:
+        engine = get_engine(name, _user_engines_dir())
+    except (ConfigError, KeyError) as exc:
+        _fail(str(exc))
+    context = engine.build_context
+    if context is None:
+        _fail(f"engine {name!r} has no Dockerfile next to {engine.source}")
+    typer.echo(f"building {engine.definition.image} from {context} ...")
+    try:
+        info = build_image(context, engine.definition.image)
+    except DockerError as exc:
+        _fail(str(exc))
+    typer.echo(f"built {engine.definition.image} id={info.image_id} arch={info.architecture}")
 
 
 @engines_app.command("check")

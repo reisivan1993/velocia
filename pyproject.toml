@@ -53,3 +53,4 @@ packages = ["velocia"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+markers = ["docker: needs a Docker daemon and builds or runs images (slow)"]

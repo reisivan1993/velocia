@@ -1,0 +1,6 @@
+name: spark-vanilla
+family: spark
+image: velocia/engine-spark-vanilla:3.5.9
+spark_versions: ["3.5"]
+spark_conf: {}
+notes: "Apache Spark 3.5.9, built from velocia/engines/builtin/spark-vanilla/Dockerfile"
