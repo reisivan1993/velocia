@@ -102,6 +102,12 @@ class Statistics(StrictModel):
     cv_flag_threshold: float = Field(0.10, gt=0, lt=1)
 
 
+class Redaction(StrictModel):
+    """Extra key patterns redacted on top of the built-in deny-list (shell-style globs)."""
+
+    key_patterns: list[Annotated[str, StringConstraints(min_length=1)]] = []
+
+
 class VelociaConfig(StrictModel):
     """Optional ``velocia.yaml``."""
 
@@ -113,6 +119,7 @@ class VelociaConfig(StrictModel):
     quiet_check: QuietCheck = QuietCheck()
     correctness: Correctness = Correctness()
     statistics: Statistics = Statistics()
+    redaction: Redaction = Redaction()
 
 
 # --- Experiment -----------------------------------------------------------------------------

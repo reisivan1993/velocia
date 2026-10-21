@@ -47,6 +47,23 @@
       "title": "QuietCheck",
       "type": "object"
     },
+    "Redaction": {
+      "additionalProperties": false,
+      "description": "Extra key patterns redacted on top of the built-in deny-list (shell-style globs).",
+      "properties": {
+        "key_patterns": {
+          "default": [],
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Key Patterns",
+          "type": "array"
+        }
+      },
+      "title": "Redaction",
+      "type": "object"
+    },
     "Statistics": {
       "additionalProperties": false,
       "properties": {
@@ -105,6 +122,12 @@
       "default": {
         "max_cpu_pct": 10.0,
         "max_other_spark_apps": 0
+      }
+    },
+    "redaction": {
+      "$ref": "#/$defs/Redaction",
+      "default": {
+        "key_patterns": []
       }
     },
     "results_dir": {

@@ -1,5 +1,9 @@
 # Spec changelog
 
+## 2026-10-21 — redaction patterns (T03)
+
+- `velocia.yaml` gains `redaction.key_patterns` (04 §2): user globs added to the built-in secret deny-list. Optional, default empty.
+
 ## 2026-10-21 — plan decisions approved (D-1 … D-13)
 
 - ADR-3: driver program and `velocia-jobs` jar shipped at submit time; engine images hold only the engine (D-1).

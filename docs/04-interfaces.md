@@ -29,7 +29,10 @@ pricing: {default_node_hour_usd: 0.40}
 quiet_check: {max_cpu_pct: 10, max_other_spark_apps: 0}
 correctness: {float_round_decimals: 4}
 statistics: {bootstrap_resamples: 10000, cv_flag_threshold: 0.10}
+redaction: {key_patterns: ["*mycorp.vault*"]}   # extra globs on top of the built-in deny-list
 ```
+
+Redaction always applies the built-in deny-list (keys matching `*password*`, `*passwd*`, `*secret*`, `*token*`, `*key*`, `*credential*`, case-insensitive); `key_patterns` only adds to it.
 
 ## 3. Experiment schema
 
