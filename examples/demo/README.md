@@ -26,11 +26,16 @@ uv run velocia run examples/demo/tpch-vanilla-vs-comet.yaml --dry-run   # what w
 uv run velocia run examples/demo/tpch-vanilla-vs-comet.yaml             # ~4-8 min
 ```
 
-The run prints one line per Spark application and ends with a summary such as:
+The run prints one line per Spark application and ends with a summary. Two runs on an
+Apple M4 Pro (Docker Desktop: 14 CPUs, 8 GB) on 2026-10-21 gave:
 
 ```
-spark-comet vs spark-vanilla (cold (cache not dropped)): speedup 1.40x [95% CI 1.37-1.42]; ...; correctness pass
+spark-comet vs spark-vanilla (cold (cache not dropped)): speedup 2.19x [95% CI 2.14-2.22]; total wall_time median 8.861 s vs 19.4 s; correctness pass
+spark-comet vs spark-vanilla (cold (cache not dropped)): speedup 2.21x [95% CI 2.10-2.30]; total wall_time median 8.799 s vs 19.5 s; correctness pass
 ```
+
+Your numbers will differ with your hardware. On macOS, `velocia run` keeps the Mac from idle
+sleep while it runs; if the host sleeps anyway (lid closed), the run is flagged as unreliable.
 
 Then:
 
