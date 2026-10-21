@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ report.experiment.name }} — Velocia report</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface: #fcfcfb; --surface-2: #f3f2ef; --border: #e2e1dc;
+  --text: #0b0b0b; --text-2: #52514e; --muted: #7a7974;
+  --series-1: #2a78d6; --ref: #52514e; --grid: #e2e1dc;
+  --good: #0ca30c; --warning: #fab219; --critical: #d03b3b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --surface: #1a1a19; --surface-2: #242423; --border: #383835;
+    --text: #f0efec; --text-2: #c3c2b7; --muted: #8f8e88;
+    --series-1: #3987e5; --ref: #c3c2b7; --grid: #383835;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface: #1a1a19; --surface-2: #242423; --border: #383835;
+  --text: #f0efec; --text-2: #c3c2b7; --muted: #8f8e88;
+  --series-1: #3987e5; --ref: #c3c2b7; --grid: #383835;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--surface); color: var(--text);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 24px; margin: 0 0 4px; }
+h2 { font-size: 19px; margin: 40px 0 8px; }
+h3 { font-size: 16px; margin: 24px 0 4px; }
+.sub, .note { color: var(--text-2); }
+.note { font-size: 13px; }
+.label { display: inline-block; margin: 8px 0 0; padding: 2px 8px; border-radius: 4px;
+  background: var(--surface-2); color: var(--text-2); font-size: 13px; }
+.tiles { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0; }
+.tile { flex: 1 1 280px; border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+.tile .what { color: var(--text-2); font-size: 13px; }
+.tile .hero { font-size: 34px; font-weight: 650; letter-spacing: -0.5px; }
+.tile .ci { color: var(--text-2); }
+.status { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; margin-top: 6px; }
+.status .dot { width: 10px; height: 10px; border-radius: 50%; }
+.status.pass .dot { background: var(--good); }
+.status.fail .dot { background: var(--critical); }
+.status.not_checked .dot { background: var(--warning); }
+.chart { width: 100%; height: auto; max-width: 680px; display: block; margin: 8px 0; }
+.chart text { font-size: 11px; fill: var(--text-2); }
+.chart .tick { text-anchor: middle; fill: var(--muted); }
+.chart .axis-note { fill: var(--muted); }
+.chart .unit { text-anchor: end; fill: var(--text); }
+.chart .total .unit, .chart .total .value { font-weight: 700; fill: var(--text); }
+.chart .grid { stroke: var(--grid); stroke-width: 1; }
+.chart .ref { stroke: var(--ref); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.chart .ci { stroke: var(--series-1); stroke-width: 2; stroke-linecap: round; }
+.chart .dot { fill: var(--series-1); stroke: var(--surface); stroke-width: 2; }
+.chart .fail { fill: var(--critical); font-size: 14px; text-anchor: middle; font-weight: 700; }
+.chart .fail-text { fill: var(--critical); font-weight: 600; }
+.chart .hit { fill: transparent; }
+.chart .row:hover .hit { fill: var(--surface-2); }
+.table-wrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 8px 0; }
+th, td { padding: 4px 8px; border-bottom: 1px solid var(--border); text-align: left;
+  white-space: nowrap; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr.total td { font-weight: 650; }
+.fail-cell { color: var(--critical); font-weight: 600; }
+ul.flags li { margin: 2px 0; }
+details { margin: 8px 0; }
+summary { cursor: pointer; color: var(--text-2); }
+pre { background: var(--surface-2); padding: 12px; border-radius: 6px; overflow-x: auto;
+  font-size: 12px; }
+code { font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+<h1>{{ report.experiment.name }}</h1>
+<div class="sub">Velocia for Apache Spark · experiment <code>{{ report.experiment.id }}</code> ·
+  reference engine <strong>{{ ref }}</strong> · {{ report.experiment.repetitions }} repetitions</div>
+{% if report.label %}<div class="label">{{ report.label }}</div>{% endif %}
+
+<p class="note">Every ratio is a ratio of medians, oriented so that &gt; 1 means better than
+{{ ref }} (for wall time: the speedup), with a 95% bootstrap confidence interval
+(seed {{ report.experiment.bootstrap_seed }}). A unit whose result differs from {{ ref }}'s is
+shown as FAILED, never as a speedup.{% if report.cross_hardware %} <strong>Cross-hardware
+comparison:</strong> cells ran on different hardware.{% endif %}</p>
+
+<div class="tiles">
+{% for s in sections %}
+  <div class="tile">
+    <div class="what">{{ s.cell.engine }} vs {{ ref }} · {{ s.cell.mode_label }}
+      {% for k, v in s.cell.config.items() %} · {{ k }}={{ v }}{% endfor %}</div>
+    {% if s.total and s.total.correctness != "fail" and s.total.ratio is not none %}
+      <div class="hero">{{ "%.2f"|format(s.total.ratio) }}x</div>
+      <div class="ci">95% CI {% if s.total.ci_low is not none %}{{ "%.2f"|format(s.total.ci_low) }}–{{ "%.2f"|format(s.total.ci_high) }}{% else %}n/a{% endif %}
+        · total {{ report.measures[0] }}</div>
+    {% elif s.total and s.total.correctness == "fail" %}
+      <div class="hero fail-cell">FAILED</div><div class="ci">at least one unit's result differs from {{ ref }}</div>
+    {% else %}
+      <div class="hero">n/a</div><div class="ci">no complete repetition</div>
+    {% endif %}
+    {% set c = s.total.correctness if s.total else "not_checked" %}
+    <div class="status {{ c }}"><span class="dot"></span>
+      {% if c == "pass" %}✓ correctness pass{% elif c == "fail" %}✕ correctness FAILED{% else %}! correctness not checked{% endif %}</div>
+  </div>
+{% endfor %}
+</div>
+
+{% if report.flags %}
+<h2>Flags</h2>
+<ul class="flags">{% for f in report.flags %}<li>{{ f }}</li>{% endfor %}</ul>
+{% endif %}
+
+{% for s in sections %}
+<h2>{{ s.cell.engine }} vs {{ ref }} — {{ s.cell.mode_label }}{% for k, v in s.cell.config.items() %}, {{ k }}={{ v }}{% endfor %}</h2>
+{% for m in s.measures %}
+<h3>{{ m.name }} <span class="note">({{ m.unit }}, {{ m.direction }} is better)</span></h3>
+{% for d in report.measure_definitions if d.name == m.name and d.formula %}
+<div class="note">Custom measure: <code>{{ d.formula }}</code> from <code>{{ d.source }}</code></div>
+{% endfor %}
+{{ m.chart }}
+<details><summary>Table</summary>
+<div class="table-wrap"><table>
+<thead><tr><th>unit</th><th class="num">{{ ref }} median</th><th class="num">{{ s.cell.engine }} median</th>
+<th>ratio [95% CI]</th><th class="num">CV</th><th class="num">n</th><th class="num">timeouts</th><th>correctness</th></tr></thead>
+<tbody>
+{% for r, base in m.rows %}
+<tr class="{{ 'total' if r.unit_id == total_unit else '' }}">
+<td>{{ 'total' if r.unit_id == total_unit else r.unit_id }}</td>
+<td class="num">{{ (base.median if base else none)|num(m.unit) }}</td>
+<td class="num">{{ r.median|num(m.unit) }}</td>
+<td class="{{ 'fail-cell' if r.correctness == 'fail' else '' }}">{{ ratio_text(r) }}</td>
+<td class="num">{{ r.cv|pct }}{% if r.cv_flag %} ⚠{% endif %}</td>
+<td class="num">{{ r.n }}</td><td class="num">{{ r.timeouts }}</td>
+<td class="{{ 'fail-cell' if r.correctness == 'fail' else '' }}">{{ r.correctness }}</td>
+</tr>
+{% endfor %}
+</tbody></table></div>
+</details>
+{% endfor %}
+{% endfor %}
+
+{% if report.plan_markers %}
+<h2>Plan markers</h2>
+<p class="note">From each engine's first timed repetition, all units: operators in the final
+SQL plans, how many ran on an accelerator, and row/columnar transitions.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>engine</th><th>mode</th><th class="num">operators</th><th class="num">accelerated</th><th class="num">transitions</th></tr></thead>
+<tbody>
+{% for c in report.cells if report.plan_markers.get(c.cell_key) %}
+{% set pm = report.plan_markers[c.cell_key] %}
+<tr><td>{{ c.engine }}</td><td>{{ c.mode_label }}</td><td class="num">{{ pm.operators }}</td>
+<td class="num">{{ pm.accelerated }}{% if pm.operators %} ({{ (pm.accelerated / pm.operators)|pct }}){% endif %}</td>
+<td class="num">{{ pm.transitions }}</td></tr>
+{% endfor %}
+</tbody></table></div>
+{% endif %}
+
+<h2>Hardware</h2>
+{% for digest, hw in report.hardware_manifests.items() %}
+{% for node in hw.node_types %}
+<p><code>{{ digest[:19] }}</code> · {{ node.count }} x {{ node.host.cpu_model }} ({{ node.host.arch }})
+{% if node.docker %} · Docker: {{ node.docker.cpus }} CPUs, {{ node.docker.memory_gib }} GiB{% endif %}</p>
+{% endfor %}
+{% endfor %}
+
+<h2>Details</h2>
+<details><summary>Experiment (secrets redacted)</summary><pre>{{ report.experiment.spec | tojson(indent=2) }}</pre></details>
+{% if report.dataset %}<details><summary>Dataset {{ report.dataset.dataset_id }}</summary><pre>{{ report.dataset | tojson(indent=2) }}</pre></details>{% endif %}
+<details><summary>Markdown version</summary><pre>{{ markdown }}</pre></details>
+</main>
+</body>
+</html>

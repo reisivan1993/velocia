@@ -188,7 +188,7 @@ def run(
         typer.echo(f"  {line}")
     for flag in doc["flags"]:
         typer.echo(f"  flag: {flag}")
-    typer.echo(f"Report: {dest / 'report.md'}")
+    typer.echo(f"Report: {dest / 'report.html'} (also report.md, report.json)")
     typer.echo(f"Results: {out_dir / 'results' / (experiment_id + '.parquet')}")
 
 
@@ -236,9 +236,8 @@ def report(
     measures: Annotated[str | None, typer.Option(help="Comma-separated measures to show.")] = None,
 ) -> None:
     """Show results with confidence intervals and correctness."""
-    if report_format is ReportFormat.html:
-        _not_implemented("T21")
-    with Catalog(Path(_config().results_dir)) as catalog:
+    results_dir = Path(_config().results_dir)
+    with Catalog(results_dir) as catalog:
         try:
             doc = build_report(catalog, experiment_id)
         except ReportError as exc:
@@ -250,7 +249,10 @@ def report(
             _fail(f"measure(s) not in this experiment: {', '.join(unknown)}")
         doc["measures"] = wanted
         doc["results"] = [r for r in doc["results"] if r["measure"] in wanted]
-    if report_format is ReportFormat.json:
+    if report_format is ReportFormat.html:
+        dest = write_reports(doc, results_dir) / "report.html"
+        typer.echo(f"Wrote {dest}")
+    elif report_format is ReportFormat.json:
         typer.echo(json.dumps(doc, indent=2, default=str))
     else:
         typer.echo(render_markdown(doc))

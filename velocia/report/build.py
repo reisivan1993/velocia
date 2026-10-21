@@ -53,10 +53,17 @@ def build_report(catalog: Catalog, experiment_id: str) -> dict[str, Any]:
 
     flags = []
     first_measure = spec_measures(spec)[0]
+    noisy: dict[tuple[str, str, str], list[str]] = {}
     for r in results:
-        where = f"{r['engine']} {r['mode']} {r['unit_id']} {r['measure']}"
         if r["cv_flag"]:
-            flags.append(f"high variation (CV {r['cv']:.0%}): {where}")
+            unit = "total" if r["unit_id"] == TOTAL_UNIT else r["unit_id"]
+            noisy.setdefault((r["engine"], r["mode"], unit), []).append(
+                f"{r['measure']} {r['cv']:.0%}"
+            )
+    for (engine, mode, unit), measures in noisy.items():
+        flags.append(f"high variation (CV > threshold): {engine} {mode} {unit}: "
+                     f"{', '.join(measures)}")  # fmt: skip
+    for r in results:
         if r["unit_id"] == TOTAL_UNIT or r["measure"] != first_measure:
             continue
         if r["timeouts"]:
@@ -307,4 +314,7 @@ def write_reports(report: dict[str, Any], results_dir: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     (dest / "report.json").write_text(json.dumps(report, indent=2, default=str) + "\n", "utf-8")
     (dest / "report.md").write_text(render_markdown(report), "utf-8")
+    from velocia.report.html import render_html  # html imports this module
+
+    (dest / "report.html").write_text(render_html(report), "utf-8")
     return dest

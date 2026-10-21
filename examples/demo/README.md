@@ -37,10 +37,13 @@ spark-comet vs spark-vanilla (cold (cache not dropped)): speedup 2.21x [95% CI 2
 Your numbers will differ with your hardware. On macOS, `velocia run` keeps the Mac from idle
 sleep while it runs; if the host sleeps anyway (lid closed), the run is flagged as unreliable.
 
-Then:
+Then open the HTML report it names (`velocia-results/reports/<experiment_id>/report.html`):
+a headline tile per engine, a chart of every query's speedup with its confidence interval, and
+the tables behind them. It is one self-contained file; it works offline and can be emailed.
 
 ```bash
-uv run velocia report <experiment_id>                 # Markdown, per query
+open velocia-results/reports/<experiment_id>/report.html   # macOS
+uv run velocia report <experiment_id>                 # Markdown in the terminal
 uv run velocia report <experiment_id> --format json   # everything, machine-readable
 ```
 
@@ -50,7 +53,7 @@ Everything lands in `./velocia-results/` (ignored by git):
 
 | Path | What |
 | --- | --- |
-| `reports/<experiment_id>/report.md`, `report.json` | The report |
+| `reports/<experiment_id>/report.html`, `report.md`, `report.json` | The report |
 | `results/<experiment_id>.parquet` | One row per engine x query x measure: median, p95, CV, ratio, CI, correctness |
 | `runs/<run_id>/manifest.json` | Per Spark application: image digests, Spark conf, hardware, driver hash, dataset checksum |
 | `runs/<run_id>/timings.json`, `checks.json` | Per-query timings and correctness checksums |
@@ -85,4 +88,5 @@ Edit `tpch-vanilla-vs-comet.yaml`: `repetitions`, `modes: [cold, warm]`, `units:
 
 ## Not in this demo yet
 
-The HTML report, custom formula measures, Kubernetes and external clusters.
+Kubernetes and external clusters, TeraSort and other job workloads, TPC-DS queries.
+Custom measures work: put a formula in `measures/<name>.yaml` (see `velocia measures check`).
