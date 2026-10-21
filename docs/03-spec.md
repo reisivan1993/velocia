@@ -83,7 +83,7 @@ name: tpch-engines-sf10
 workload: {kind: sql, suite: tpch, units: all, scale_factor: 10, format: parquet-zstd}
 engines: [spark-vanilla, spark-gluten, spark-comet]
 reference_engine: spark-vanilla
-cluster: {runner: kind, executors: 4, executor_cores: 4, executor_memory: 8g}
+cluster: {runner: k8s, executors: 4, executor_cores: 4, executor_memory: 8g}
 spark_conf:
   spark.sql.adaptive.enabled: [true, false]
 measures: [wall_time, task_cpu_time, cost_usd]

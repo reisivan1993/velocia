@@ -1,0 +1,3 @@
+# expect: custom.cu-per-hour.[key]
+name: h
+custom: {cu-per-hour: 1.0}

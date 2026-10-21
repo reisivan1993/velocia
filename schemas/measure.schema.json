@@ -1,0 +1,50 @@
+{
+  "$defs": {
+    "Direction": {
+      "enum": [
+        "lower",
+        "higher"
+      ],
+      "title": "Direction",
+      "type": "string"
+    }
+  },
+  "$id": "urn:velocia:schema:measure:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``measures/<name>.yaml``. The formula is parsed and checked by the measures module.",
+  "properties": {
+    "description": {
+      "default": "",
+      "title": "Description",
+      "type": "string"
+    },
+    "direction": {
+      "$ref": "#/$defs/Direction"
+    },
+    "formula": {
+      "minLength": 1,
+      "title": "Formula",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+      "title": "Name",
+      "type": "string"
+    },
+    "unit": {
+      "minLength": 1,
+      "title": "Unit",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "unit",
+    "direction",
+    "formula"
+  ],
+  "title": "MeasureDef",
+  "type": "object"
+}

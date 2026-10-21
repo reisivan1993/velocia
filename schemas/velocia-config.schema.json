@@ -1,0 +1,125 @@
+{
+  "$defs": {
+    "Correctness": {
+      "additionalProperties": false,
+      "properties": {
+        "float_round_decimals": {
+          "default": 4,
+          "maximum": 18,
+          "minimum": 0,
+          "title": "Float Round Decimals",
+          "type": "integer"
+        }
+      },
+      "title": "Correctness",
+      "type": "object"
+    },
+    "Pricing": {
+      "additionalProperties": false,
+      "properties": {
+        "default_node_hour_usd": {
+          "default": 0.4,
+          "minimum": 0,
+          "title": "Default Node Hour Usd",
+          "type": "number"
+        }
+      },
+      "title": "Pricing",
+      "type": "object"
+    },
+    "QuietCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "max_cpu_pct": {
+          "default": 10,
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Max Cpu Pct",
+          "type": "number"
+        },
+        "max_other_spark_apps": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Max Other Spark Apps",
+          "type": "integer"
+        }
+      },
+      "title": "QuietCheck",
+      "type": "object"
+    },
+    "Statistics": {
+      "additionalProperties": false,
+      "properties": {
+        "bootstrap_resamples": {
+          "default": 10000,
+          "minimum": 1000,
+          "title": "Bootstrap Resamples",
+          "type": "integer"
+        },
+        "cv_flag_threshold": {
+          "default": 0.1,
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0,
+          "title": "Cv Flag Threshold",
+          "type": "number"
+        }
+      },
+      "title": "Statistics",
+      "type": "object"
+    }
+  },
+  "$id": "urn:velocia:schema:velocia-config:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "Optional ``velocia.yaml``.",
+  "properties": {
+    "correctness": {
+      "$ref": "#/$defs/Correctness",
+      "default": {
+        "float_round_decimals": 4
+      }
+    },
+    "engines_dir": {
+      "default": "./engines",
+      "title": "Engines Dir",
+      "type": "string"
+    },
+    "hardware_dir": {
+      "default": "./hardware",
+      "title": "Hardware Dir",
+      "type": "string"
+    },
+    "measures_dir": {
+      "default": "./measures",
+      "title": "Measures Dir",
+      "type": "string"
+    },
+    "pricing": {
+      "$ref": "#/$defs/Pricing",
+      "default": {
+        "default_node_hour_usd": 0.4
+      }
+    },
+    "quiet_check": {
+      "$ref": "#/$defs/QuietCheck",
+      "default": {
+        "max_cpu_pct": 10.0,
+        "max_other_spark_apps": 0
+      }
+    },
+    "results_dir": {
+      "default": "./velocia-results",
+      "title": "Results Dir",
+      "type": "string"
+    },
+    "statistics": {
+      "$ref": "#/$defs/Statistics",
+      "default": {
+        "bootstrap_resamples": 10000,
+        "cv_flag_threshold": 0.1
+      }
+    }
+  },
+  "title": "VelociaConfig",
+  "type": "object"
+}

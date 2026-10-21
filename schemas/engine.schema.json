@@ -1,0 +1,61 @@
+{
+  "$id": "urn:velocia:schema:engine:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``engines/<name>.yaml``.",
+  "properties": {
+    "family": {
+      "default": "spark",
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+      "title": "Family",
+      "type": "string"
+    },
+    "image": {
+      "minLength": 1,
+      "title": "Image",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+      "title": "Name",
+      "type": "string"
+    },
+    "notes": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Notes"
+    },
+    "spark_conf": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {},
+      "title": "Spark Conf",
+      "type": "object"
+    },
+    "spark_versions": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Spark Versions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "name",
+    "image",
+    "spark_versions"
+  ],
+  "title": "EngineDef",
+  "type": "object"
+}

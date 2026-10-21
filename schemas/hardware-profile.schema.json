@@ -1,0 +1,76 @@
+{
+  "$id": "urn:velocia:schema:hardware-profile:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "``hardware/<name>.yaml``: per-node facts that hardware probes cannot observe.",
+  "properties": {
+    "accelerator_model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Accelerator Model"
+    },
+    "accelerators_per_node": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Accelerators Per Node",
+      "type": "integer"
+    },
+    "custom": {
+      "default": {},
+      "patternProperties": {
+        "^[A-Za-z_][A-Za-z0-9_]*$": {
+          "type": "number"
+        }
+      },
+      "propertyNames": {
+        "maxLength": 64
+      },
+      "title": "Custom",
+      "type": "object"
+    },
+    "name": {
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+      "title": "Name",
+      "type": "string"
+    },
+    "price_per_node_hour_usd": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Price Per Node Hour Usd"
+    },
+    "watts_per_node": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Watts Per Node"
+    }
+  },
+  "required": [
+    "name"
+  ],
+  "title": "HardwareProfile",
+  "type": "object"
+}

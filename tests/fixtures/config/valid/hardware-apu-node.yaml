@@ -1,0 +1,7 @@
+name: apu-node
+price_per_node_hour_usd: 6.10
+watts_per_node: 900
+accelerators_per_node: 2
+accelerator_model: "declared-model"
+custom:
+  cu_per_node_hour: 1.0

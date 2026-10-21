@@ -1,0 +1,6 @@
+# expect: engines[0]
+name: x
+workload: {kind: sql, suite: tpch}
+engines: [Spark-Vanilla]
+reference_engine: spark-vanilla
+cluster: {runner: local, executors: 1, executor_cores: 2, executor_memory: 2g}

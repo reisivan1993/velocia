@@ -1,0 +1,5 @@
+results_dir: ./velocia-results
+pricing: {default_node_hour_usd: 0.40}
+quiet_check: {max_cpu_pct: 10, max_other_spark_apps: 0}
+correctness: {float_round_decimals: 4}
+statistics: {bootstrap_resamples: 10000, cv_flag_threshold: 0.10}

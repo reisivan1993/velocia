@@ -1,0 +1,5 @@
+name: vendor_cu
+unit: CU
+direction: lower
+description: "Vendor compute units consumed (definition supplied by the user)"
+formula: "unit.wall_s / 3600 * cluster.nodes * hw.cu_per_node_hour"

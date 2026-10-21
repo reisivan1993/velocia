@@ -1,0 +1,2 @@
+# expect: statistics.cv_flag_threshold
+statistics: {cv_flag_threshold: 10}

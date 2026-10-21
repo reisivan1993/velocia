@@ -1,0 +1,16 @@
+# Cross-hardware example from docs/03-spec.md §3
+name: terasort-cpu-vs-apu
+workload: {kind: job, suite: tera, units: [terasort], rows: 10000000000}
+clusters:
+  cpu: {runner: k8s, node_selector: {pool: cpu}, executors: 8, executor_cores: 8, executor_memory: 32g, hardware_profile: cpu-m6i}
+  apu: {runner: external, master: "spark://apu-host:7077", deploy_mode: client,
+        executors: 2, executor_cores: 8, executor_memory: 32g, hardware_profile: apu-node,
+        data_uri: "s3a://bench/velocia/", eventlog_uri: "s3a://bench/velocia/eventlog/"}
+engines:
+  - {name: spark-vanilla, cluster: cpu}
+  - {name: spark-apu, cluster: apu}
+reference_engine: spark-vanilla
+comparison: {allow_cross_hardware: true}
+measures: [wall_time, node_hours, accelerator_hours, cost_usd]
+repetitions: 5
+modes: [cold]

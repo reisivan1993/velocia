@@ -1,0 +1,6 @@
+# expect: workload.suite
+name: x
+workload: {kind: job, suite: tpch}
+engines: [spark-vanilla, spark-comet]
+reference_engine: spark-vanilla
+cluster: {runner: local, executors: 1, executor_cores: 2, executor_memory: 2g}

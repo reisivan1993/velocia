@@ -1,0 +1,8 @@
+# expect: engines[1].cluster
+name: x
+workload: {kind: sql, suite: tpch}
+engines: [{name: spark-vanilla, cluster: a}, spark-comet]
+reference_engine: spark-vanilla
+clusters:
+  a: {runner: local, executors: 1, executor_cores: 1, executor_memory: 1g}
+  b: {runner: local, executors: 1, executor_cores: 1, executor_memory: 1g}

@@ -1,0 +1,8 @@
+name: spark-comet
+family: spark
+image: ghcr.io/velocia-dev/velocia-engine-comet@sha256:0000000000000000000000000000000000000000000000000000000000000000
+spark_versions: ["3.5"]
+spark_conf:
+  spark.plugins: org.apache.spark.CometPlugin
+  spark.comet.enabled: "true"
+notes: "Built from engines/comet/Dockerfile"

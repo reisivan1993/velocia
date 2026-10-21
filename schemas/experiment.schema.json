@@ -1,0 +1,705 @@
+{
+  "$defs": {
+    "Comparison": {
+      "additionalProperties": false,
+      "properties": {
+        "allow_cross_hardware": {
+          "default": false,
+          "title": "Allow Cross Hardware",
+          "type": "boolean"
+        }
+      },
+      "title": "Comparison",
+      "type": "object"
+    },
+    "CustomJob": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact": {
+          "title": "Artifact",
+          "type": "string"
+        },
+        "entrypoint": {
+          "title": "Entrypoint",
+          "type": "string"
+        },
+        "validator": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Validator"
+        }
+      },
+      "required": [
+        "artifact",
+        "entrypoint"
+      ],
+      "title": "CustomJob",
+      "type": "object"
+    },
+    "DataFormat": {
+      "enum": [
+        "parquet-snappy",
+        "parquet-zstd"
+      ],
+      "title": "DataFormat",
+      "type": "string"
+    },
+    "EngineRef": {
+      "additionalProperties": false,
+      "properties": {
+        "cluster": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cluster"
+        },
+        "name": {
+          "maxLength": 64,
+          "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "EngineRef",
+      "type": "object"
+    },
+    "ExternalCluster": {
+      "additionalProperties": false,
+      "properties": {
+        "data_uri": {
+          "title": "Data Uri",
+          "type": "string"
+        },
+        "deploy_mode": {
+          "default": "client",
+          "enum": [
+            "client",
+            "cluster"
+          ],
+          "title": "Deploy Mode",
+          "type": "string"
+        },
+        "driver_memory": {
+          "default": "2g",
+          "pattern": "^[1-9][0-9]*[kmgt]$",
+          "title": "Driver Memory",
+          "type": "string"
+        },
+        "eventlog_uri": {
+          "title": "Eventlog Uri",
+          "type": "string"
+        },
+        "executor_cores": {
+          "minimum": 1,
+          "title": "Executor Cores",
+          "type": "integer"
+        },
+        "executor_memory": {
+          "pattern": "^[1-9][0-9]*[kmgt]$",
+          "title": "Executor Memory",
+          "type": "string"
+        },
+        "executors": {
+          "minimum": 1,
+          "title": "Executors",
+          "type": "integer"
+        },
+        "hardware_profile": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hardware Profile"
+        },
+        "master": {
+          "title": "Master",
+          "type": "string"
+        },
+        "rest_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rest Url"
+        },
+        "runner": {
+          "const": "external",
+          "title": "Runner",
+          "type": "string"
+        },
+        "submit_args": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Submit Args",
+          "type": "array"
+        }
+      },
+      "required": [
+        "executors",
+        "executor_cores",
+        "executor_memory",
+        "runner",
+        "master",
+        "data_uri",
+        "eventlog_uri"
+      ],
+      "title": "ExternalCluster",
+      "type": "object"
+    },
+    "K8sCluster": {
+      "additionalProperties": false,
+      "properties": {
+        "driver_memory": {
+          "default": "2g",
+          "pattern": "^[1-9][0-9]*[kmgt]$",
+          "title": "Driver Memory",
+          "type": "string"
+        },
+        "executor_cores": {
+          "minimum": 1,
+          "title": "Executor Cores",
+          "type": "integer"
+        },
+        "executor_memory": {
+          "pattern": "^[1-9][0-9]*[kmgt]$",
+          "title": "Executor Memory",
+          "type": "string"
+        },
+        "executors": {
+          "minimum": 1,
+          "title": "Executors",
+          "type": "integer"
+        },
+        "hardware_profile": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hardware Profile"
+        },
+        "namespace": {
+          "default": "default",
+          "title": "Namespace",
+          "type": "string"
+        },
+        "node_selector": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "title": "Node Selector",
+          "type": "object"
+        },
+        "resources": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "default": {},
+          "title": "Resources",
+          "type": "object"
+        },
+        "runner": {
+          "const": "k8s",
+          "title": "Runner",
+          "type": "string"
+        },
+        "tolerations": {
+          "default": [],
+          "items": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "title": "Tolerations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "executors",
+        "executor_cores",
+        "executor_memory",
+        "runner"
+      ],
+      "title": "K8sCluster",
+      "type": "object"
+    },
+    "LocalCluster": {
+      "additionalProperties": false,
+      "properties": {
+        "driver_memory": {
+          "default": "2g",
+          "pattern": "^[1-9][0-9]*[kmgt]$",
+          "title": "Driver Memory",
+          "type": "string"
+        },
+        "executor_cores": {
+          "minimum": 1,
+          "title": "Executor Cores",
+          "type": "integer"
+        },
+        "executor_memory": {
+          "pattern": "^[1-9][0-9]*[kmgt]$",
+          "title": "Executor Memory",
+          "type": "string"
+        },
+        "executors": {
+          "minimum": 1,
+          "title": "Executors",
+          "type": "integer"
+        },
+        "hardware_profile": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Hardware Profile"
+        },
+        "runner": {
+          "const": "local",
+          "title": "Runner",
+          "type": "string"
+        }
+      },
+      "required": [
+        "executors",
+        "executor_cores",
+        "executor_memory",
+        "runner"
+      ],
+      "title": "LocalCluster",
+      "type": "object"
+    },
+    "Mode": {
+      "enum": [
+        "cold",
+        "warm"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "Suite": {
+      "enum": [
+        "tpch",
+        "tpcds",
+        "tera",
+        "text",
+        "graph",
+        "kmeans",
+        "etl",
+        "synth",
+        "custom"
+      ],
+      "title": "Suite",
+      "type": "string"
+    },
+    "Workload": {
+      "additionalProperties": false,
+      "properties": {
+        "dataset_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dataset Id"
+        },
+        "format": {
+          "$ref": "#/$defs/DataFormat",
+          "default": "parquet-zstd"
+        },
+        "job": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CustomJob"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "kind": {
+          "$ref": "#/$defs/WorkloadKind"
+        },
+        "rows": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rows"
+        },
+        "scale_factor": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scale Factor"
+        },
+        "sql_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sql Dir"
+        },
+        "suite": {
+          "$ref": "#/$defs/Suite"
+        },
+        "sweep": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "boolean"
+                    }
+                  ]
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sweep"
+        },
+        "units": {
+          "anyOf": [
+            {
+              "const": "all",
+              "type": "string"
+            },
+            {
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "type": "array"
+            }
+          ],
+          "default": "all",
+          "title": "Units"
+        }
+      },
+      "required": [
+        "kind",
+        "suite"
+      ],
+      "title": "Workload",
+      "type": "object"
+    },
+    "WorkloadKind": {
+      "enum": [
+        "sql",
+        "job"
+      ],
+      "title": "WorkloadKind",
+      "type": "string"
+    }
+  },
+  "$id": "urn:velocia:schema:experiment:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "An experiment file (docs/04-interfaces.md \u00a73).",
+  "properties": {
+    "cluster": {
+      "anyOf": [
+        {
+          "discriminator": {
+            "mapping": {
+              "external": "#/$defs/ExternalCluster",
+              "k8s": "#/$defs/K8sCluster",
+              "local": "#/$defs/LocalCluster"
+            },
+            "propertyName": "runner"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/LocalCluster"
+            },
+            {
+              "$ref": "#/$defs/K8sCluster"
+            },
+            {
+              "$ref": "#/$defs/ExternalCluster"
+            }
+          ]
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cluster"
+    },
+    "clusters": {
+      "anyOf": [
+        {
+          "patternProperties": {
+            "^[a-z0-9][a-z0-9_.-]*$": {
+              "discriminator": {
+                "mapping": {
+                  "external": "#/$defs/ExternalCluster",
+                  "k8s": "#/$defs/K8sCluster",
+                  "local": "#/$defs/LocalCluster"
+                },
+                "propertyName": "runner"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/LocalCluster"
+                },
+                {
+                  "$ref": "#/$defs/K8sCluster"
+                },
+                {
+                  "$ref": "#/$defs/ExternalCluster"
+                }
+              ]
+            }
+          },
+          "propertyNames": {
+            "maxLength": 64
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Clusters"
+    },
+    "comparison": {
+      "$ref": "#/$defs/Comparison",
+      "default": {
+        "allow_cross_hardware": false
+      }
+    },
+    "engines": {
+      "items": {
+        "oneOf": [
+          {
+            "maxLength": 64,
+            "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+            "type": "string"
+          },
+          {
+            "$ref": "#/$defs/EngineRef"
+          }
+        ]
+      },
+      "minItems": 1,
+      "title": "Engines",
+      "type": "array"
+    },
+    "measures": {
+      "default": [
+        "wall_time",
+        "task_cpu_time"
+      ],
+      "items": {
+        "maxLength": 64,
+        "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Measures",
+      "type": "array"
+    },
+    "modes": {
+      "default": [
+        "cold",
+        "warm"
+      ],
+      "items": {
+        "$ref": "#/$defs/Mode"
+      },
+      "minItems": 1,
+      "title": "Modes",
+      "type": "array"
+    },
+    "name": {
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+      "title": "Name",
+      "type": "string"
+    },
+    "price_table": {
+      "anyOf": [
+        {
+          "patternProperties": {
+            "^[a-z0-9][a-z0-9_.-]*$": {
+              "type": "number"
+            }
+          },
+          "propertyNames": {
+            "maxLength": 64
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Price Table"
+    },
+    "reference_engine": {
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+      "title": "Reference Engine",
+      "type": "string"
+    },
+    "repetitions": {
+      "default": 5,
+      "minimum": 1,
+      "title": "Repetitions",
+      "type": "integer"
+    },
+    "spark_conf": {
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            },
+            "minItems": 1,
+            "type": "array"
+          }
+        ]
+      },
+      "default": {},
+      "title": "Spark Conf",
+      "type": "object"
+    },
+    "timeout_per_unit": {
+      "default": "30m",
+      "pattern": "^[1-9][0-9]*(s|m|h)$",
+      "title": "Timeout Per Unit",
+      "type": "string"
+    },
+    "workload": {
+      "$ref": "#/$defs/Workload"
+    }
+  },
+  "required": [
+    "name",
+    "workload",
+    "engines",
+    "reference_engine"
+  ],
+  "title": "Experiment",
+  "type": "object"
+}

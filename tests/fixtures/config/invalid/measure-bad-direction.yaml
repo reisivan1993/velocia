@@ -1,0 +1,5 @@
+# expect: direction
+name: m
+unit: s
+direction: down
+formula: unit.wall_s
