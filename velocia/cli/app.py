@@ -14,6 +14,8 @@ import typer
 from velocia import __version__
 from velocia.config import ConfigError, VelociaConfig, load_model, models
 from velocia.datagen.duckdb_tpc import DatagenError, generate
+from velocia.doctor import doctor as run_doctor
+from velocia.doctor import engine_check
 from velocia.engines.docker import DockerError, build_image, inspect_image
 from velocia.engines.registry import get_engine, load_engines
 from velocia.experiment.estimate import estimate, format_duration
@@ -261,7 +263,12 @@ def report(
 @app.command()
 def doctor() -> None:
     """Check Docker or Kubernetes access, Spark Operator and disk space."""
-    _not_implemented("T22")
+    checks = run_doctor(_config())
+    marks = {"ok": "ok  ", "warn": "WARN", "fail": "FAIL", "skip": "skip"}
+    for check in checks:
+        typer.echo(f"{marks[check.status]}  {check.name:24} {check.detail}")
+    if any(c.status == "fail" for c in checks):
+        raise typer.Exit(1)
 
 
 @engines_app.command("list")
@@ -304,7 +311,15 @@ def engines_check(
     cluster: Annotated[str | None, typer.Option(help="Named cluster to smoke-test on.")] = None,
 ) -> None:
     """Run the engine smoke test."""
-    _not_implemented("T22")
+    if cluster is not None:
+        _fail("--cluster needs the external runner, which is not available yet")
+    typer.echo(f"Checking {name}: TPC-H-derived q1, q3, q6 at SF0.01 against spark-vanilla ...")
+    result = engine_check(name, spark, _config())
+    for line in result.lines:
+        typer.echo(f"  {line}")
+    if not result.ok:
+        _fail(f"engine check failed for {name}")
+    typer.echo(f"{name}: ok (results in experiment {result.experiment_id})")
 
 
 @measures_app.command("list")
