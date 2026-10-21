@@ -2,13 +2,22 @@
 
 Every state change is written before the next step starts, so an interrupted experiment can
 resume from here (docs/06-design.md §3).
+
+DuckDB lets one process hold the file at a time, so every operation opens the database, does
+its work and closes it again, waiting briefly when another process (a running experiment, a
+report) holds it. That keeps ``velocia report`` and ``velocia compare`` usable during a run.
 """
 
 import json
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 import duckdb
+
+LOCK_WAIT_S = 60.0
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS dataset (
@@ -75,11 +84,27 @@ class Catalog:
     def __init__(self, results_dir: Path) -> None:
         results_dir.mkdir(parents=True, exist_ok=True)
         self.path = results_dir / "catalog.duckdb"
-        self.con = duckdb.connect(self.path)
-        self.con.execute(SCHEMA)
+        with self._connection() as con:
+            con.execute(SCHEMA)
+
+    @contextmanager
+    def _connection(self) -> Iterator[duckdb.DuckDBPyConnection]:
+        deadline = time.monotonic() + LOCK_WAIT_S
+        while True:
+            try:
+                con = duckdb.connect(self.path)
+                break
+            except duckdb.IOException as exc:
+                if "lock" not in str(exc).lower() or time.monotonic() > deadline:
+                    raise
+                time.sleep(0.2)
+        try:
+            yield con
+        finally:
+            con.close()
 
     def close(self) -> None:
-        self.con.close()
+        """Nothing stays open between operations; kept for ``with`` blocks."""
 
     def __enter__(self) -> "Catalog":
         return self
@@ -87,12 +112,16 @@ class Catalog:
     def __exit__(self, *exc: object) -> None:
         self.close()
 
+    def execute(self, sql: str, params: list[Any] | None = None) -> None:
+        with self._connection() as con:
+            con.execute(sql, params or [])
+
     # --- writes --------------------------------------------------------------------------
 
     def insert(self, table: str, row: dict[str, Any]) -> None:
         cols = ", ".join(row)
         marks = ", ".join("?" for _ in row)
-        self.con.execute(
+        self.execute(
             f"INSERT OR REPLACE INTO {table} ({cols}) VALUES ({marks})", list(row.values())
         )
 
@@ -101,44 +130,46 @@ class Catalog:
             return
         cols = list(rows[0])
         marks = ", ".join("?" for _ in cols)
-        self.con.executemany(
-            f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({marks})",
-            [[r[c] for c in cols] for r in rows],
-        )
+        with self._connection() as con:
+            con.executemany(
+                f"INSERT INTO {table} ({', '.join(cols)}) VALUES ({marks})",
+                [[r[c] for c in cols] for r in rows],
+            )
 
     def update(self, table: str, key: dict[str, Any], values: dict[str, Any]) -> None:
         sets = ", ".join(f"{k} = ?" for k in values)
         where = " AND ".join(f"{k} = ?" for k in key)
-        self.con.execute(
-            f"UPDATE {table} SET {sets} WHERE {where}", [*values.values(), *key.values()]
-        )
+        self.execute(f"UPDATE {table} SET {sets} WHERE {where}", [*values.values(), *key.values()])
 
     def forget_cell(self, experiment_id: str, cell_key: str) -> None:
         """Drop everything an unfinished cell wrote, before it runs again on resume."""
-        runs = [
-            r[0]
-            for r in self.con.execute(
-                "SELECT run_id FROM run WHERE experiment_id = ? AND cell_key = ?",
+        with self._connection() as con:
+            runs = [
+                r[0]
+                for r in con.execute(
+                    "SELECT run_id FROM run WHERE experiment_id = ? AND cell_key = ?",
+                    [experiment_id, cell_key],
+                ).fetchall()
+            ]
+            for table in ("unit_run", "unit_check", "measure_value"):
+                for run_id in runs:
+                    con.execute(f"DELETE FROM {table} WHERE run_id = ?", [run_id])
+            con.execute(
+                "DELETE FROM run WHERE experiment_id = ? AND cell_key = ?",
                 [experiment_id, cell_key],
-            ).fetchall()
-        ]
-        for table in ("unit_run", "unit_check", "measure_value"):
-            for run_id in runs:
-                self.con.execute(f"DELETE FROM {table} WHERE run_id = ?", [run_id])
-        self.con.execute(
-            "DELETE FROM run WHERE experiment_id = ? AND cell_key = ?", [experiment_id, cell_key]
-        )
+            )
 
     def replace_results(self, experiment_id: str, rows: list[dict[str, Any]]) -> None:
-        self.con.execute("DELETE FROM result WHERE experiment_id = ?", [experiment_id])
+        self.execute("DELETE FROM result WHERE experiment_id = ?", [experiment_id])
         self.insert_many("result", rows)
 
     # --- reads ---------------------------------------------------------------------------
 
     def query(self, sql: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
-        cur = self.con.execute(sql, params or [])
-        names = [d[0] for d in cur.description]
-        return [dict(zip(names, row, strict=True)) for row in cur.fetchall()]
+        with self._connection() as con:
+            cur = con.execute(sql, params or [])
+            names = [d[0] for d in cur.description]
+            return [dict(zip(names, row, strict=True)) for row in cur.fetchall()]
 
     def experiment(self, experiment_id: str) -> dict[str, Any] | None:
         rows = self.query("SELECT * FROM experiment WHERE experiment_id = ?", [experiment_id])
@@ -164,7 +195,7 @@ class Catalog:
         # COPY can't take prepared parameters, so both literals are quoted here.
         path = str(dest).replace("'", "''")
         exp = experiment_id.replace("'", "''")
-        self.con.execute(
+        self.execute(
             f"COPY (SELECT {', '.join(RESULT_COLUMNS)} FROM result WHERE experiment_id = '{exp}' "
             f"ORDER BY cell_key, unit_id, measure) TO '{path}' (FORMAT parquet)"
         )

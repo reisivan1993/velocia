@@ -32,6 +32,8 @@ from velocia.report.build import (
     render_markdown,
     write_reports,
 )
+from velocia.report.compare import CompareError
+from velocia.report.compare import compare as run_compare
 from velocia.store.catalog import Catalog
 from velocia.workloads import UnknownUnitError, get_workload, select_units
 
@@ -273,6 +275,38 @@ def report(
         typer.echo(json.dumps(doc, indent=2, default=str))
     else:
         typer.echo(render_markdown(doc))
+
+
+@app.command()
+def compare(
+    experiment_a: Annotated[str, typer.Argument(help="First experiment ID.")],
+    experiment_b: Annotated[str, typer.Argument(help="Second experiment ID (e.g. a rerun).")],
+    force: Annotated[
+        bool, typer.Option(help="Compare even across different hardware manifests.")
+    ] = False,
+) -> None:
+    """Check that a rerun reproduces an experiment (medians inside CIs, no ratio flips)."""
+    with Catalog(Path(_config().results_dir)) as catalog:
+        try:
+            result = run_compare(catalog, experiment_a, experiment_b, force)
+        except CompareError as exc:
+            _fail(str(exc))
+    typer.echo(
+        f"{result.inside}/{result.checked} medians of {experiment_b} fall inside the 95% CI of "
+        f"{experiment_a}'s ({result.share_inside:.0%}; criterion >= 90%)"
+    )
+    for line in result.outside[:20]:
+        typer.echo(f"  outside: {line}")
+    if len(result.outside) > 20:
+        typer.echo(f"  ... and {len(result.outside) - 20} more")
+    for line in result.flips:
+        typer.echo(f"  FLIP: {line}")
+    if result.unmatched_cells:
+        typer.echo(f"  {result.unmatched_cells} cells exist in only one experiment")
+    verdict = "reproduces" if result.reproduces else "does NOT reproduce"
+    typer.echo(f"{experiment_b} {verdict} {experiment_a}")
+    if not result.reproduces:
+        raise typer.Exit(1)
 
 
 @app.command()

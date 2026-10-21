@@ -1,0 +1,11 @@
+# v0.1 acceptance (plan T25): TPC-H-derived SF10, vanilla Apache Spark vs Comet, cold, 5 reps.
+# Sized for Docker Desktop with 8 GB of memory.
+name: acceptance-tpch-sf10
+workload: {kind: sql, suite: tpch, units: all, scale_factor: 10, format: parquet-zstd}
+engines: [spark-vanilla, spark-comet]
+reference_engine: spark-vanilla
+cluster: {runner: local, executors: 1, executor_cores: 4, executor_memory: 4g}
+measures: [wall_time, task_cpu_time, cost_usd]
+repetitions: 5
+modes: [cold]
+timeout_per_unit: 20m

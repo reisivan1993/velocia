@@ -1,5 +1,10 @@
 # Spec changelog
 
+## 2026-10-21 — compare (from v0.2) and concurrent catalog access
+
+- `velocia compare <exp_a> <exp_b> [--force]` implemented early because the v0.1 reproducibility criterion (D-3) needs it: per cell, unit and measure, is the second run's median inside a seeded bootstrap 95% CI of the first run's median; does any ratio CI move from better to worse. Exit 1 when the criterion (>= 90% inside, no flips) fails; refuses different hardware manifests unless `--force`.
+- The catalog is opened per operation (with a short wait on a held lock), so `velocia report` and `compare` work while an experiment runs.
+
 ## 2026-10-21 — TeraSort (T18, DataFrame fallback D-11)
 
 - `velocia datagen --suite tera --rows N` (TeraGen as a seeded Spark job, Parquet with a 10-byte binary `key` and a 90-byte binary `value`); workload `tera` with unit `terasort`; its validator (sortedness within and across files, rows and checksum equal to the input) runs in the correctness pass and an invalid output is a correctness `fail` (checks status `invalid`). `run.json` gains task `teragen`, `scratch_dir` and job units (`{"id", "job"}`). `velocia engines check` adds a 100,000-row TeraSort.

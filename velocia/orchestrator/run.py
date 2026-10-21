@@ -677,7 +677,7 @@ def compute_results(
             values[(cell_key, TOTAL_UNIT, measure)].append(
                 sum(v for v in rep_values if v is not None)
             )
-    catalog.con.execute(
+    catalog.execute(
         "DELETE FROM measure_value "
         "WHERE run_id IN (SELECT run_id FROM run WHERE experiment_id = ?)",
         [experiment_id],
