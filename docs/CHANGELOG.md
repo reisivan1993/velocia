@@ -1,5 +1,9 @@
 # Spec changelog
 
+## 2026-10-21 — dataset manifest (T06)
+
+- Dataset manifest format v1 defined (04 §6) with `schemas/dataset-manifest.schema.json`. Data lives in `<results_dir>/data/<dataset_id>/<table>/` unless `--out` is given.
+
 ## 2026-10-21 — redaction patterns (T03)
 
 - `velocia.yaml` gains `redaction.key_patterns` (04 §2): user globs added to the built-in secret deny-list. Optional, default empty.

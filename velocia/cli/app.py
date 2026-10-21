@@ -11,7 +11,8 @@ from typing import Annotated, NoReturn
 import typer
 
 from velocia import __version__
-from velocia.config import ConfigError, VelociaConfig, load_model
+from velocia.config import ConfigError, VelociaConfig, load_model, models
+from velocia.datagen.duckdb_tpc import DatagenError, generate
 from velocia.engines.docker import DockerError, build_image, inspect_image
 from velocia.engines.registry import get_engine, load_engines
 
@@ -100,7 +101,33 @@ def datagen(
     out: Annotated[Path | None, typer.Option(help="Output directory.")] = None,
 ) -> None:
     """Generate a dataset and its manifest."""
-    _not_implemented("T06")
+    if suite is Suite.tera:
+        _not_implemented("T18")
+    if iceberg:
+        _fail("--iceberg is not supported yet")
+    if sf is None:
+        _fail(f"--sf is required for --suite {suite.value}")
+    if rows is not None:
+        _fail(f"--rows does not apply to --suite {suite.value}")
+    results_dir = Path(_config().results_dir)
+    try:
+        manifest, created = generate(
+            models.Suite(suite.value),
+            sf,
+            models.DataFormat(data_format.value),
+            out or results_dir / "data",
+            progress=typer.echo,
+        )
+    except DatagenError as exc:
+        _fail(str(exc))
+    catalog_copy = results_dir / "datasets" / f"{manifest.dataset_id}.json"
+    catalog_copy.parent.mkdir(parents=True, exist_ok=True)
+    catalog_copy.write_text(manifest.model_dump_json(indent=2) + "\n", "utf-8")
+
+    typer.echo(f"{'Generated' if created else 'Reusing existing'} dataset {manifest.dataset_id}")
+    typer.echo(f"  {manifest.label}, {manifest.files} files, {manifest.bytes:,} bytes")
+    typer.echo(f"  location: {manifest.location}")
+    typer.echo(f"  checksum: {manifest.checksum}")
 
 
 @app.command()

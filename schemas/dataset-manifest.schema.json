@@ -1,0 +1,216 @@
+{
+  "$defs": {
+    "DataFormat": {
+      "enum": [
+        "parquet-snappy",
+        "parquet-zstd"
+      ],
+      "title": "DataFormat",
+      "type": "string"
+    },
+    "DatasetFile": {
+      "additionalProperties": false,
+      "properties": {
+        "bytes": {
+          "minimum": 0,
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "bytes"
+      ],
+      "title": "DatasetFile",
+      "type": "object"
+    },
+    "DatasetTable": {
+      "additionalProperties": false,
+      "properties": {
+        "checksum": {
+          "title": "Checksum",
+          "type": "string"
+        },
+        "files": {
+          "items": {
+            "$ref": "#/$defs/DatasetFile"
+          },
+          "title": "Files",
+          "type": "array"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "rows": {
+          "minimum": 0,
+          "title": "Rows",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "rows",
+        "checksum",
+        "files"
+      ],
+      "title": "DatasetTable",
+      "type": "object"
+    },
+    "Suite": {
+      "enum": [
+        "tpch",
+        "tpcds",
+        "tera",
+        "text",
+        "graph",
+        "kmeans",
+        "etl",
+        "synth",
+        "custom"
+      ],
+      "title": "Suite",
+      "type": "string"
+    }
+  },
+  "$id": "urn:velocia:schema:dataset-manifest:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "bytes": {
+      "minimum": 0,
+      "title": "Bytes",
+      "type": "integer"
+    },
+    "checksum": {
+      "title": "Checksum",
+      "type": "string"
+    },
+    "compression": {
+      "title": "Compression",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "data_format": {
+      "$ref": "#/$defs/DataFormat"
+    },
+    "dataset_id": {
+      "title": "Dataset Id",
+      "type": "string"
+    },
+    "files": {
+      "minimum": 0,
+      "title": "Files",
+      "type": "integer"
+    },
+    "format": {
+      "const": "velocia-dataset",
+      "default": "velocia-dataset",
+      "title": "Format",
+      "type": "string"
+    },
+    "generator": {
+      "title": "Generator",
+      "type": "string"
+    },
+    "generator_params": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "string"
+          }
+        ]
+      },
+      "title": "Generator Params",
+      "type": "object"
+    },
+    "generator_version": {
+      "title": "Generator Version",
+      "type": "string"
+    },
+    "label": {
+      "title": "Label",
+      "type": "string"
+    },
+    "location": {
+      "title": "Location",
+      "type": "string"
+    },
+    "row_group_size": {
+      "exclusiveMinimum": 0,
+      "title": "Row Group Size",
+      "type": "integer"
+    },
+    "scale": {
+      "title": "Scale",
+      "type": "number"
+    },
+    "seed": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Seed"
+    },
+    "suite": {
+      "$ref": "#/$defs/Suite"
+    },
+    "tables": {
+      "items": {
+        "$ref": "#/$defs/DatasetTable"
+      },
+      "title": "Tables",
+      "type": "array"
+    },
+    "velocia_version": {
+      "title": "Velocia Version",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "dataset_id",
+    "suite",
+    "label",
+    "generator",
+    "generator_version",
+    "generator_params",
+    "seed",
+    "scale",
+    "data_format",
+    "compression",
+    "row_group_size",
+    "location",
+    "tables",
+    "files",
+    "bytes",
+    "checksum",
+    "created_at",
+    "velocia_version"
+  ],
+  "title": "DatasetManifest",
+  "type": "object"
+}

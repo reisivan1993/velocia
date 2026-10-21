@@ -25,7 +25,7 @@ def test_version() -> None:
 @pytest.mark.parametrize(
     "args",
     [
-        ["datagen", "--suite", "tpch", "--sf", "1"],
+        ["datagen", "--suite", "tera", "--rows", "10"],
         ["run", "exp.yaml"],
         ["report", "exp-1"],
         ["doctor"],

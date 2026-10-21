@@ -95,6 +95,8 @@ custom:                 # free-form coefficients for custom measures, exposed as
 
 **`results/<experiment_id>.parquet`** (long format, one row per measure): `experiment_id, cell_key, engine, cluster, hardware_manifest_hash, config_hash, mode, unit_id, measure, measure_unit, direction, n, median, p95, cv, cv_flag, ratio, ci_low, ci_high, correctness (pass|fail|not_checked), timeouts`.
 
+**`datasets/<dataset_id>.json`** (dataset manifest; a copy sits next to the data as `_dataset.json`): `{format: "velocia-dataset", version: 1, dataset_id, suite, label, generator, generator_version, generator_params, seed, scale, data_format, compression, row_group_size, location, tables: [{name, rows, checksum, files: [{path, bytes}]}], files, bytes, checksum, created_at, velocia_version}`. `dataset_id` is `<suite>-sf<scale>-<data_format>`. Checksums are over the data content (rows rendered with column names), so the same data has the same checksum in any format or compression. Schema: `schemas/dataset-manifest.schema.json`.
+
 **Report JSON:** `{format: "velocia-report", version: 1, experiment, dataset, hardware_manifests, cross_hardware, measures, results: [...], flags: [...]}`.
 
 ## 7. Benchmark bundle format v1

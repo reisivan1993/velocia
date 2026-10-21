@@ -14,6 +14,7 @@ classifiers = [
     "Topic :: System :: Benchmark",
 ]
 dependencies = [
+    "duckdb>=1.1",
     "pydantic>=2.8",
     "pyyaml>=6",
     "typer>=0.12",
@@ -25,9 +26,11 @@ velocia = "velocia.cli.app:main"
 [dependency-groups]
 dev = [
     "hypothesis>=6.170.5",
+    "jsonschema>=4.26.0",
     "mypy>=1.11",
     "pytest>=8",
     "ruff>=0.6",
+    "types-jsonschema>=4.26.0.20261006",
     "types-pyyaml>=6.0.12.20260906",
 ]
 

@@ -7,6 +7,7 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from velocia.config.models import EngineDef, Experiment, HardwareProfile, MeasureDef, VelociaConfig
+from velocia.datagen.manifest import DatasetManifest
 
 SCHEMAS: dict[str, type[BaseModel]] = {
     "velocia-config": VelociaConfig,
@@ -14,6 +15,7 @@ SCHEMAS: dict[str, type[BaseModel]] = {
     "engine": EngineDef,
     "measure": MeasureDef,
     "hardware-profile": HardwareProfile,
+    "dataset-manifest": DatasetManifest,
 }
 
 
