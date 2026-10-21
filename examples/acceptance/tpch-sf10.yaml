@@ -1,10 +1,13 @@
 # v0.1 acceptance (plan T25): TPC-H-derived SF10, vanilla Apache Spark vs Comet, cold, 5 reps.
-# Sized for Docker Desktop with 8 GB of memory: Comet needs heap + 2g off-heap + ~1g overhead.
+# Needs Docker with at least 12 GB of memory (Comet: 6g heap + 2g off-heap + overhead) on a quiet
+# machine; with less, vanilla runs out of heap and Comet containers get OOM-killed (see
+# docs/plan/decisions.md, T25). `velocia run --dry-run` warns if it won't fit.
+# Run it twice, then: velocia compare <first experiment id> <second experiment id>
 name: acceptance-tpch-sf10
 workload: {kind: sql, suite: tpch, units: all, scale_factor: 10, format: parquet-zstd}
 engines: [spark-vanilla, spark-comet]
 reference_engine: spark-vanilla
-cluster: {runner: local, executors: 1, executor_cores: 4, executor_memory: 3g}
+cluster: {runner: local, executors: 1, executor_cores: 4, executor_memory: 6g}
 measures: [wall_time, task_cpu_time, cost_usd]
 repetitions: 5
 modes: [cold]
