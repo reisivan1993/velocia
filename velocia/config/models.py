@@ -222,6 +222,10 @@ class ExternalCluster(ClusterBase):
     eventlog_uri: str
     submit_args: list[str] = []
     rest_url: str | None = None
+    # Where spark-submit runs: the engine image in Docker (default), or a Spark install here.
+    spark_home: str | None = None
+    docker_network: str = "host"  # executors must reach the driver (client mode)
+    docker_args: list[str] = []  # extra `docker run` arguments, e.g. mounts or env files
 
 
 Cluster = Annotated[LocalCluster | K8sCluster | ExternalCluster, Field(discriminator="runner")]

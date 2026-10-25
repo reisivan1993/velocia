@@ -11,7 +11,7 @@ All public interfaces are versioned and change only with a spec update and a cha
 | `velocia report <experiment_id> [--format md\|json\|html] [--measures M,...]` | Results with CIs and correctness |
 | `velocia compare <exp_a> <exp_b> [--force]` | Compare two experiments on the same workload |
 | `velocia bundle <experiment_id> [--out FILE] [--strip-sql]` | Export a benchmark bundle; `--strip-sql` removes SQL text and plan literals from event logs for sharing outside the team |
-| `velocia engines list\|build <name>\|check <name> (--spark <version> \| --cluster <name>)` | Engine images and compatibility; `--cluster` runs the smoke test on a named (for example external) cluster |
+| `velocia engines list\|build <name>\|check <name> (--spark <version> \| --cluster <name> --experiment <file>)` | Engine images and compatibility; `--cluster` runs the smoke test on a named (for example external) cluster defined in the experiment file, with `spark-vanilla` as the local reference; `velocia run` refuses an external cluster until this passed for the same engine definition and cluster configuration |
 | `velocia workloads list\|show <suite>` | Available workloads and their units |
 | `velocia measures list\|check <file>` | Built-in and custom measures; `check` validates a formula against the input catalog |
 | `velocia hardware probe [--cluster NAME]` | Run the hardware probes and print what the manifest will record |
@@ -42,7 +42,7 @@ Redaction always applies the built-in deny-list (keys matching `*password*`, `*p
 | `workload` | object | `kind` (sql, job), `suite` (tpch, tpcds, tera, text, graph, kmeans, etl, synth, custom), `units` (all or list), suite parameters (`scale_factor`, `rows`, `sweep`, …), `format`, `dataset_id?`, `sql_dir?`, `job?` (custom job: artifact, entrypoint, validator) |
 | `engines` | list | Engine names, or `{name, cluster}` to pin an engine to a named cluster |
 | `reference_engine` | string | Must be in `engines` |
-| `cluster` / `clusters` | object / map | One cluster, or named clusters. Each: `runner`, `executors`, `executor_cores`, `executor_memory`, `driver_memory`, `hardware_profile?`, runner-specific fields (`k8s`: `node_selector`, `tolerations`, `resources`; `external`: `master`, `deploy_mode`, `data_uri`, `eventlog_uri`, `submit_args`, `rest_url?`) |
+| `cluster` / `clusters` | object / map | One cluster, or named clusters. Each: `runner`, `executors`, `executor_cores`, `executor_memory`, `driver_memory`, `hardware_profile?`, runner-specific fields (`k8s`: `node_selector`, `tolerations`, `resources`; `external`: `master`, `deploy_mode` (`client` only so far), `data_uri`, `eventlog_uri`, `submit_args`, `rest_url?`, `spark_home?` (submit with a Spark install on this machine instead of the engine image in Docker), `docker_network` (default `host`; on another network the driver's container name is its `spark.driver.host`), `docker_args` (extra `docker run` arguments)) |
 | `spark_conf` | map | Value or list of values; lists expand into cells |
 | `measures` | list | Measure names; default `[wall_time, task_cpu_time]` |
 | `comparison` | object | `allow_cross_hardware` (bool, default false) |

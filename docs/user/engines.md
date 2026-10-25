@@ -38,5 +38,4 @@ This runs TPC-H-derived q1, q3, q6 at scale factor 0.01 and a 100,000-row TeraSo
 `spark-vanilla`, and fails unless every result matches.
 
 Hardware accelerators that run on their own servers (for example an APU appliance exposing the
-regular Spark API) will use the `external` runner; until then, an accelerator's image can run
-with the `local` runner where the device is available to Docker.
+regular Spark API) use the `external` runner: see [External clusters](external.md).

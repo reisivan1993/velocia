@@ -26,7 +26,9 @@ from velocia.config import ConfigError, load_model
 from velocia.config.models import (
     Cluster,
     Experiment,
+    ExternalCluster,
     HardwareProfile,
+    K8sCluster,
     LocalCluster,
     Mode,
     Suite,
@@ -35,6 +37,7 @@ from velocia.config.models import (
 from velocia.datagen.duckdb_tpc import dataset_id as make_dataset_id
 from velocia.datagen.manifest import DatasetManifest, results_label
 from velocia.datagen.tera import tera_dataset_id
+from velocia.engines import cluster_checks
 from velocia.engines.docker import inspect_image
 from velocia.engines.registry import Engine, load_engines
 from velocia.experiment.expander import Cell, expand, spark_value, stable_hash
@@ -47,6 +50,7 @@ from velocia.measures.builtins import ClusterInputs, Measure, UnitInputs
 from velocia.measures.formula import parse, unknown_hw_inputs
 from velocia.measures.registry import load_measures
 from velocia.runners.base import AppResult, AppSpec
+from velocia.runners.external import ExternalRunner, declared_hardware
 from velocia.runners.local import LocalRunner, container_memory_mb, keep_awake
 from velocia.stats.summary import ratio_ci, summarize
 from velocia.store.catalog import Catalog, as_json
@@ -89,8 +93,12 @@ def _git_sha() -> str | None:
     return out.stdout.strip() + ("-dirty" if dirty else "")
 
 
-def prepare(path: Path, config: VelociaConfig) -> Prepared:
-    """Validate everything that can be checked before the first application starts."""
+def prepare(path: Path, config: VelociaConfig, cluster_gate: bool = True) -> Prepared:
+    """Validate everything that can be checked before the first application starts.
+
+    ``cluster_gate``: refuse external clusters whose smoke test hasn't passed for the engine
+    (off only for the smoke test itself).
+    """
     warnings: list[str] = []
     try:
         experiment = load_model(path, Experiment)
@@ -119,8 +127,16 @@ def prepare(path: Path, config: VelociaConfig) -> Prepared:
 
     clusters = experiment.named_clusters
     for name, cluster in clusters.items():
-        if not isinstance(cluster, LocalCluster):
-            raise RunError(f"cluster {name!r}: only the local runner is available so far")
+        if isinstance(cluster, K8sCluster):
+            raise RunError(f"cluster {name!r}: the k8s runner is not available yet")
+        if isinstance(cluster, ExternalCluster):
+            if cluster.deploy_mode != "client":
+                raise RunError(f"cluster {name!r}: the external runner supports client mode only")
+            if cluster.hardware_profile is None:
+                warnings.append(
+                    f"cluster {name!r}: no hardware_profile; Velocia can't probe external nodes, "
+                    "so the manifest only records the executor shape"
+                )
     profiles: dict[str, HardwareProfile | None] = {}
     for name, cluster in clusters.items():
         profiles[name] = None
@@ -130,6 +146,19 @@ def prepare(path: Path, config: VelociaConfig) -> Prepared:
                 profiles[name] = load_model(profile_path, HardwareProfile)
             except ConfigError as exc:
                 raise RunError(str(exc)) from exc
+
+    if cluster_gate:
+        for ref in experiment.engine_refs:
+            cluster_name = ref.cluster or next(iter(clusters))
+            cluster = clusters[cluster_name]
+            if isinstance(cluster, ExternalCluster) and not cluster_checks.passed(
+                Path(config.results_dir), known[ref.name], cluster
+            ):
+                raise RunError(
+                    f"{ref.name} has no passing smoke test on cluster {cluster_name!r} with this "
+                    f"engine definition and cluster configuration; run: velocia engines check "
+                    f"{ref.name} --cluster {cluster_name} --experiment {path}"
+                )
 
     check_hardware(experiment, profiles, [available[m] for m in experiment.measures])
     warnings += memory_warnings(experiment, known, clusters)
@@ -257,6 +286,7 @@ class Orchestrator:
         self.results_dir = results_dir
         self.echo = echo
         self.redactor = Redactor(config.redaction.key_patterns)
+        self._staged: set[str] = set()  # external clusters holding the verified dataset
 
     # --- run ------------------------------------------------------------------------------
 
@@ -353,8 +383,12 @@ class Orchestrator:
         hardware_base: dict[str, Any],
     ) -> None:
         exp = self.p.experiment
-        assert isinstance(cell.cluster, LocalCluster)
-        runner = LocalRunner(cell.cluster, self.config.quiet_check.max_cpu_pct)
+        runner: LocalRunner | ExternalRunner
+        if isinstance(cell.cluster, ExternalCluster):
+            runner = ExternalRunner(cell.cluster)
+        else:
+            assert isinstance(cell.cluster, LocalCluster)
+            runner = LocalRunner(cell.cluster, self.config.quiet_check.max_cpu_pct)
         problems = runner.check()
         engine = self.p.engines[cell.engine]
         if not problems and not runner.image_present(engine.definition.image):
@@ -366,12 +400,17 @@ class Orchestrator:
             raise RunError("; ".join(problems))
 
         profile = self.p.profiles[cell.cluster_name]
-        hardware = {
-            **hardware_base,
-            "profile": profile.model_dump(mode="json") if profile else None,
-        }
-        if profile is not None and profile.accelerators_per_node:
-            hardware = probe_local(profile)
+        if isinstance(runner, ExternalRunner):
+            assert isinstance(cell.cluster, ExternalCluster)
+            self._stage(runner, cell.cluster_name, driver, engine.definition.image)
+            hardware = declared_hardware(cell.cluster_name, cell.cluster, profile)
+        else:
+            hardware = {
+                **hardware_base,
+                "profile": profile.model_dump(mode="json") if profile else None,
+            }
+            if profile is not None and profile.accelerators_per_node:
+                hardware = probe_local(profile)
         hw_hash = hardware_manifest_hash(hardware)
         quiet = runner.quiet_check()
         if not quiet.ok:
@@ -421,6 +460,7 @@ class Orchestrator:
                 units=[{"id": u.id, "sql": u.sql, "job": u.job} for u in self.p.units],
                 dataset_location=Path(self.p.dataset.location),
                 tables=[t.name for t in self.p.dataset.tables],
+                dataset_id=self.p.dataset.dataset_id,
                 timeout_per_unit_s=timeout_s,
                 app_timeout_s=APP_OVERHEAD_S + passes * len(self.p.units) * timeout_s,
                 float_round_decimals=self.config.correctness.float_round_decimals,
@@ -475,6 +515,27 @@ class Orchestrator:
             {"experiment_id": experiment_id, "cell_key": cell.cell_key},
             {"status": "done"},
         )
+
+    def _stage(
+        self, runner: ExternalRunner, cluster_name: str, driver: DriverPackage, image: str
+    ) -> None:
+        """Put the dataset on the cluster's storage and verify it, once per cluster and run."""
+        if cluster_name in self._staged:
+            return
+        dataset = self.p.dataset
+        self.echo(f"Staging dataset {dataset.dataset_id} on cluster {cluster_name!r}")
+        try:
+            problems, tail = runner.stage(dataset, driver, image)
+        finally:
+            runner.teardown()
+        if problems:
+            log = self.redactor.redact_text(tail)
+            raise RunError(
+                f"dataset {dataset.dataset_id} on cluster {cluster_name!r}: "
+                + "; ".join(problems)
+                + (f"\n{log}" if log else "")
+            )
+        self._staged.add(cluster_name)
 
     def _manifest(
         self,

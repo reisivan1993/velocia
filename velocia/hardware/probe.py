@@ -104,17 +104,18 @@ def hardware_manifest_hash(hardware: dict[str, Any]) -> str:
     for node in hardware["node_types"]:
         host = node.get("host") or {}
         docker = node.get("docker") or {}
-        facts.append(
-            {
-                "count": node["count"],
-                "cpu_model": host.get("cpu_model"),
-                "arch": host.get("arch"),
-                "cores": docker.get("cpus") or host.get("cores"),
-                "memory_gib": docker.get("memory_gib") or host.get("memory_gib"),
-                "disk_type": node.get("disk_type"),
-                "accelerators": node.get("accelerators"),
-                "source": node.get("source"),
-            }
-        )
+        fact = {
+            "count": node["count"],
+            "cpu_model": host.get("cpu_model"),
+            "arch": host.get("arch"),
+            "cores": docker.get("cpus") or host.get("cores"),
+            "memory_gib": docker.get("memory_gib") or host.get("memory_gib"),
+            "disk_type": node.get("disk_type"),
+            "accelerators": node.get("accelerators"),
+            "source": node.get("source"),
+        }
+        if node.get("profile"):  # declared nodes: the profile names the hardware
+            fact["profile"] = node["profile"]
+        facts.append(fact)
     canonical = json.dumps(facts, sort_keys=True, separators=(",", ":"))
     return "sha256:" + hashlib.sha256(canonical.encode()).hexdigest()

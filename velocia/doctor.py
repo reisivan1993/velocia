@@ -4,15 +4,16 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import duckdb
 import yaml
 
 from velocia.config import ConfigError, VelociaConfig
-from velocia.config.models import DataFormat, Suite
+from velocia.config.models import Cluster, DataFormat, Suite
 from velocia.datagen.duckdb_tpc import DatagenError, generate
 from velocia.datagen.tera import generate_tera
+from velocia.engines import cluster_checks
 from velocia.engines.registry import get_engine, load_engines
 from velocia.hardware.probe import probe_local
 from velocia.orchestrator.run import Orchestrator, RunError, prepare
@@ -25,6 +26,7 @@ MIN_DOCKER_MEMORY_GIB = 4
 CHECK_UNITS = ["q1", "q3", "q6"]
 CHECK_TERA_ROWS = 100_000
 REFERENCE = "spark-vanilla"
+LOCAL_REFERENCE = "local"  # where vanilla runs when the engine is checked on another cluster
 
 
 @dataclass(frozen=True)
@@ -105,11 +107,18 @@ class EngineCheckResult:
     lines: list[str]
 
 
-def engine_check(name: str, spark: str | None, config: VelociaConfig) -> EngineCheckResult:
+def engine_check(
+    name: str,
+    spark: str | None,
+    config: VelociaConfig,
+    cluster: tuple[str, Cluster] | None = None,
+) -> EngineCheckResult:
     """Smoke test against vanilla, correctness required: TPC-H-derived q1, q3, q6 at SF0.01
     and a 100,000-row TeraSort.
 
-    Runs in ``<results_dir>/_checks`` so the main catalog only holds real experiments.
+    Runs in ``<results_dir>/_checks`` so the main catalog only holds real experiments. With
+    ``cluster`` (name, definition) the engine runs there and vanilla runs locally as the
+    reference; a pass is recorded for the experiment gate (``engines.cluster_checks``).
     """
     try:
         engine = get_engine(name, Path(config.engines_dir))
@@ -156,12 +165,22 @@ def engine_check(name: str, spark: str | None, config: VelociaConfig) -> EngineC
         ("terasort", {"kind": "job", "suite": "tera", "rows": CHECK_TERA_ROWS}),
     ):
         passed, experiment_id, part = _smoke(
-            name, f"engine-check-{name}-{label}", engines, workload, check_dir, check_config
+            name,
+            f"engine-check-{name}-{label}",
+            engines,
+            workload,
+            check_dir,
+            check_config,
+            cluster,
         )
         ok = ok and passed
         lines += part
         if experiment_id:
             experiment_ids.append(experiment_id)
+    if ok and cluster is not None:
+        cluster_checks.record_pass(
+            Path(config.results_dir), engine, cluster[0], cluster[1], ", ".join(experiment_ids)
+        )
     return EngineCheckResult(ok, ", ".join(experiment_ids) or None, lines)
 
 
@@ -172,19 +191,27 @@ def _smoke(
     workload: dict[str, object],
     check_dir: Path,
     check_config: VelociaConfig,
+    cluster: tuple[str, Cluster] | None = None,
 ) -> tuple[bool, str | None, list[str]]:
+    local = {"runner": "local", "executors": 1, "executor_cores": 2, "executor_memory": "2g"}
+    placement: dict[str, Any] = {"cluster": local, "engines": engines}
+    measures = ["wall_time"]
+    if cluster is not None:
+        cluster_name, definition = cluster
+        target = cluster_name if cluster_name != LOCAL_REFERENCE else f"{cluster_name}-target"
+        refs = [{"name": e, "cluster": LOCAL_REFERENCE if e != name else target} for e in engines]
+        placement = {
+            "clusters": {LOCAL_REFERENCE: local, target: definition.model_dump(mode="json")},
+            "engines": refs,
+            "comparison": {"allow_cross_hardware": True},
+        }
+        measures = ["wall_time", "node_hours"]  # cross-hardware needs a normalized measure
     experiment = {
         "name": experiment_name,
         "workload": workload,
-        "engines": engines,
+        **placement,
         "reference_engine": REFERENCE,
-        "cluster": {
-            "runner": "local",
-            "executors": 1,
-            "executor_cores": 2,
-            "executor_memory": "2g",
-        },
-        "measures": ["wall_time"],
+        "measures": measures,
         "repetitions": 1,
         "modes": ["cold"],
         "timeout_per_unit": "5m",
@@ -193,7 +220,7 @@ def _smoke(
     path.write_text(yaml.safe_dump(experiment, sort_keys=False), "utf-8")
     lines: list[str] = []
     try:
-        prepared = prepare(path, check_config)
+        prepared = prepare(path, check_config, cluster_gate=False)
         # One repetition is the point of a smoke test; don't warn about it.
         prepared.warnings[:] = [w for w in prepared.warnings if "repetitions=" not in w]
         experiment_id = Orchestrator(prepared, check_config, check_dir, echo=lines.append).run()

@@ -1,5 +1,16 @@
 # Spec changelog
 
+## 2026-10-25 — cluster smoke-test gate (T43)
+
+- `velocia engines check <engine> --cluster <name> --experiment <file>`: the smoke test (q1, q3, q6 at SF0.01 and a 100,000-row TeraSort, correctness required) with the engine on that cluster and `spark-vanilla` locally as the reference. A pass is recorded in `<results_dir>/_checks/cluster-checks.json` under a hash of the engine definition and the cluster configuration; `velocia run` refuses an external cluster without a matching pass, so a changed image, conf or cluster needs a new check.
+
+## 2026-10-25 — external runner (T40, part of T41)
+
+- `external` clusters run: `spark-submit --deploy-mode client` to `master`, from the engine image in Docker or from `spark_home`. New optional cluster fields `spark_home`, `docker_network`, `docker_args` (04 §3). `deploy_mode: cluster` is refused for now.
+- Before the first cell on an external cluster the dataset is copied to `<data_uri>/<dataset_id>/` unless a `_velocia_staged.json` marker with the same dataset checksum is there, then verified in place (every file's size and each table's row count read back by Spark); a mismatch stops the run. Copies use the cluster's own Hadoop filesystems, so no storage client is shipped.
+- `run.json` gains task `stage` (writes `stage.json`), `eventlog_fetch` (after `stop()` the driver copies its event log from `eventlog_uri` to the local work dir), `cleanup` (scratch URIs deleted after the run; job output goes to `<data_uri>/_scratch/<run_id>`), `executor_wait_s` (fail clearly when no executor registers); the driver reports into `fetch.json`. A log that can't be fetched leaves driver timings, null event-log measures and a manifest note.
+- Manifests of external runs record hardware as declared (`source: declared`, executor shape, the profile's name and accelerators); the profile name is part of the hardware manifest hash for declared nodes. Quiet check uses `rest_url` (standalone `/json/` or YARN `/ws/v1/cluster/apps`), otherwise "quiet check skipped". Cold mode is always "cold (cache not dropped)".
+
 ## 2026-10-21 — compare (from v0.2) and concurrent catalog access
 
 - `velocia compare <exp_a> <exp_b> [--force]` implemented early because the v0.1 reproducibility criterion (D-3) needs it: per cell, unit and measure, is the second run's median inside a seeded bootstrap 95% CI of the first run's median; does any ratio CI move from better to worse. Exit 1 when the criterion (>= 90% inside, no flips) fails; refuses different hardware manifests unless `--force`.

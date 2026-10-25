@@ -359,15 +359,28 @@ def engines_check(
     name: Annotated[str, typer.Argument(help="Engine name.")],
     spark: Annotated[str | None, typer.Option(help="Spark version to check.")] = None,
     cluster: Annotated[str | None, typer.Option(help="Named cluster to smoke-test on.")] = None,
+    experiment: Annotated[
+        Path | None, typer.Option(help="Experiment file that defines --cluster.")
+    ] = None,
 ) -> None:
     """Run the engine smoke test."""
+    target = None
     if cluster is not None:
-        _fail("--cluster needs the external runner, which is not available yet")
+        if experiment is None:
+            _fail("--cluster needs --experiment, the experiment file that defines the cluster")
+        try:
+            clusters = load_model(experiment, models.Experiment).named_clusters
+        except ConfigError as exc:
+            _fail(str(exc))
+        if cluster not in clusters:
+            _fail(f"{experiment} has no cluster {cluster!r} (has: {', '.join(clusters)})")
+        target = (cluster, clusters[cluster])
+    where = f" on cluster {cluster!r}" if cluster else ""
     typer.echo(
-        f"Checking {name} against spark-vanilla: TPC-H-derived q1, q3, q6 at SF0.01 and a "
-        "100,000-row TeraSort ..."
+        f"Checking {name}{where} against spark-vanilla: TPC-H-derived q1, q3, q6 at SF0.01 "
+        "and a 100,000-row TeraSort ..."
     )
-    result = engine_check(name, spark, _config())
+    result = engine_check(name, spark, _config(), target)
     for line in result.lines:
         typer.echo(f"  {line}")
     if not result.ok:

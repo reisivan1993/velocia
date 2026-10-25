@@ -9,12 +9,19 @@
      "float_round_decimals": 4,
      "units": [{"id": "q1", "sql": "..."} | {"id": "terasort", "job": "terasort"}],
      "tables": {"lineitem": "/data/.../lineitem"}, "output_dir": "/velocia/out",
-     "scratch_dir": "/velocia/work/scratch", "teragen": {"rows", "seed", "partitions", "output"}}
+     "scratch_dir": "/velocia/work/scratch", "teragen": {"rows", "seed", "partitions", "output"},
+     "stage": {...}, "eventlog_fetch": {"dir": "s3a://...", "dest": "/velocia/work/eventlog"},
+     "cleanup": ["s3a://.../_scratch/<run_id>"], "executor_wait_s": 300}
 
 ``time`` writes ``timings.json`` (rewritten after every unit, so a crash keeps what finished);
 ``check`` writes ``checks.json`` with one row count and checksum per unit (untimed, ADR-5);
 job units write into ``scratch_dir`` and their validator's verdict goes into ``checks.json``.
 ``teragen`` generates TeraSort input data and writes ``teragen.json``.
+``stage`` copies a dataset to the cluster's storage and verifies it there (``stage.json``).
+
+On clusters Velocia doesn't run (the ``external`` runner) the optional ``eventlog_fetch``
+copies this application's finished event log back to a local directory after ``stop()``, and
+``cleanup`` removes scratch output on the cluster's storage; both report into ``fetch.json``.
 """
 
 import argparse
@@ -25,6 +32,7 @@ import time
 from functools import partial
 from typing import Any
 
+from .fs import Fs, join
 from .jobs import JOBS, VALIDATORS, teragen
 from .units import Unit, guarded, run_units, tag
 
@@ -192,6 +200,111 @@ def _check(spark: Any, spec: dict[str, Any], units: list[Unit], out_path: str) -
     )
 
 
+STAGED_MARKER = "_velocia_staged.json"
+
+
+def _verify(spark: Any, fs: Fs, stage: dict[str, Any]) -> list[str]:
+    """Every file's size, then each table's row count read back by Spark."""
+    remote = stage["remote_dir"]
+    problems = []
+    for rel, expected in sorted(stage["files"].items()):
+        size = fs.size(join(remote, rel))
+        if size != expected:
+            problems.append(f"{rel}: {size} bytes on the cluster, expected {expected}")
+    if problems:
+        return problems
+    for table, expected in sorted(stage["tables"].items()):
+        rows = spark.read.parquet(join(remote, table)).count()
+        if rows != expected:
+            problems.append(f"{table}: {rows} rows on the cluster, expected {expected}")
+    return problems
+
+
+def _stage(spark: Any, fs: Fs, spec: dict[str, Any], out_path: str) -> None:
+    """Make ``remote_dir`` hold exactly this dataset, verified in place.
+
+    A copy marked with the same dataset checksum is reused when it verifies; anything else
+    (no marker, an interrupted copy, the same data written with other file names) is deleted
+    and copied again. The marker is written last.
+    """
+    stage = spec["stage"]
+    remote = stage["remote_dir"]
+    marker = join(remote, STAGED_MARKER)
+    previous = fs.read_text(marker)
+    reused = previous is not None and json.loads(previous).get("checksum") == stage["checksum"]
+    problems = _verify(spark, fs, stage) if reused else ["not staged"]
+    uploaded = 0
+    if problems:
+        reused = False
+        if fs.exists(remote):
+            fs.delete(remote)
+        for rel in stage["files"]:
+            fs.upload(os.path.join(stage["local_dir"], rel), join(remote, rel))
+            uploaded += 1
+        problems = _verify(spark, fs, stage)
+        if not problems:
+            fs.write_text(marker, json.dumps({"checksum": stage["checksum"]}))
+    _write_json(
+        out_path,
+        {
+            "format": "velocia-stage",
+            "version": 1,
+            "remote_dir": remote,
+            "reused": reused,
+            "uploaded_files": uploaded,
+            "problems": problems,
+            "spark": _spark_info(spark),
+        },
+    )
+
+
+def _fetch_eventlog(fs: Fs, fetch: dict[str, Any], app_id: str) -> str | None:
+    """Copy this application's event log (file or rolling directory) to ``dest``."""
+    names = [
+        name
+        for name, _, _ in fs.list(fetch["dir"])
+        if name.startswith(app_id) or name == f"eventlog_v2_{app_id}"
+    ]
+    if not names:
+        return f"no event log for {app_id} in {fetch['dir']}"
+    os.makedirs(fetch["dest"], exist_ok=True)
+    for name in names:
+        fs.download(join(fetch["dir"], name), os.path.join(fetch["dest"], name))
+    return None
+
+
+def _after_stop(fs: Fs, spec: dict[str, Any], app_id: str) -> None:
+    report: dict[str, Any] = {"format": "velocia-fetch", "version": 1, "eventlog": None}
+    fetch = spec.get("eventlog_fetch")
+    if fetch:
+        try:
+            report["eventlog"] = _fetch_eventlog(fs, fetch, app_id) or "ok"
+        except Exception as exc:  # reported; the timings still count
+            report["eventlog"] = f"{type(exc).__name__}: {exc}"
+    problems = []
+    for uri in spec.get("cleanup") or []:
+        try:
+            fs.delete(uri)
+        except Exception as exc:
+            problems.append(f"{uri}: {type(exc).__name__}: {exc}")
+    report["cleanup_problems"] = problems
+    _write_json(os.path.join(spec["output_dir"], "fetch.json"), report)
+
+
+def _wait_for_executors(spark: Any, timeout_s: float) -> None:
+    """On a cluster, fail clearly when no executor registers (e.g. it can't reach the driver)."""
+    tracker = spark.sparkContext._jsc.sc().statusTracker()
+    deadline = time.monotonic() + timeout_s
+    while len(tracker.getExecutorInfos()) < 2:  # the driver is listed too
+        if time.monotonic() > deadline:
+            raise SystemExit(
+                f"no executor registered within {timeout_s:.0f}s; check that executors can "
+                "reach the driver (network, spark.driver.host) and that the cluster has free "
+                "cores and memory"
+            )
+        time.sleep(1)
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="velocia-driver")
     parser.add_argument("--spec", required=True, help="path to run.json")
@@ -204,7 +317,11 @@ def main(argv: list[str] | None = None) -> None:
     from pyspark.sql import SparkSession
 
     spark = SparkSession.builder.appName(f"velocia-{spec['run_id']}").getOrCreate()
+    fs = Fs(spark)
+    app_id = spark.sparkContext.applicationId
     try:
+        if spec.get("executor_wait_s"):
+            _wait_for_executors(spark, float(spec["executor_wait_s"]))
         # Reading Parquet footers runs Spark jobs too; tag them so every job has a tag.
         setup_tag = tag(spec["run_id"], SETUP_UNIT, 0)
         spark.sparkContext.setJobGroup(setup_tag, setup_tag)
@@ -218,7 +335,11 @@ def main(argv: list[str] | None = None) -> None:
             _time(spark, spec, units, os.path.join(spec["output_dir"], "timings.json"))
         elif spec["task"] == "check":
             _check(spark, spec, units, os.path.join(spec["output_dir"], "checks.json"))
+        elif spec["task"] == "stage":
+            _stage(spark, fs, spec, os.path.join(spec["output_dir"], "stage.json"))
         else:
             raise SystemExit(f"unknown task {spec['task']!r}")
     finally:
-        spark.stop()
+        spark.stop()  # closes the event log; the JVM and ``fs`` stay usable
+        if spec.get("eventlog_fetch") or spec.get("cleanup"):
+            _after_stop(fs, spec, app_id)

@@ -17,7 +17,7 @@ class AppSpec:
     image: str
     spark_conf: dict[str, str]
     driver: DriverPackage
-    task: Literal["time", "check", "teragen"]
+    task: Literal["time", "check", "teragen", "stage"]
     mode: str
     reps: list[int]
     warmup: bool
@@ -28,6 +28,8 @@ class AppSpec:
     app_timeout_s: float
     float_round_decimals: int = 4
     teragen: dict[str, int | str] | None = None  # rows, seed, partitions (task teragen)
+    dataset_id: str = ""  # where the data sits on a cluster's own storage (external runner)
+    stage: dict[str, object] | None = None  # files, tables, checksum (task stage)
 
 
 @dataclass(frozen=True)

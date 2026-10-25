@@ -9,6 +9,7 @@ nav:
   - Experiments: experiments.md
   - Measures: measures.md
   - Engines: engines.md
+  - External clusters: external.md
   - Results and reports: results.md
   - Troubleshooting: troubleshooting.md
 theme:

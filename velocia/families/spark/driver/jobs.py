@@ -8,8 +8,9 @@ TeraSort follows the classic benchmark's data shape: 100-byte records, a 10-byte
 and a 90-byte binary value, generated deterministically from a seed.
 """
 
-import os
 from typing import Any
+
+from .fs import Fs, join
 
 KEY_BYTES = 10
 VALUE_BYTES = 90
@@ -35,11 +36,14 @@ def terasort(spark: Any, tables: dict[str, str], output: str) -> None:
     spark.read.parquet(tables["tera"]).orderBy("key").write.mode("overwrite").parquet(output)
 
 
-def _part_files(output: str) -> list[str]:
-    names = sorted(
-        n for n in os.listdir(output) if n.startswith("part-") and n.endswith(".parquet")
-    )
-    return [os.path.join(output, n) for n in names]
+def _part_files(spark: Any, output: str) -> list[str]:
+    """Output part files in name order; ``output`` may be on any storage the cluster reads."""
+    names = [
+        name
+        for name, _, is_dir in Fs(spark).list(output)
+        if not is_dir and name.startswith("part-") and name.endswith(".parquet")
+    ]
+    return [join(output, n) for n in names]
 
 
 def validate_terasort(spark: Any, tables: dict[str, str], output: str) -> dict[str, Any]:
@@ -66,7 +70,7 @@ def validate_terasort(spark: Any, tables: dict[str, str], output: str) -> dict[s
         return result
 
     previous_max = None
-    for path in _part_files(output):
+    for path in _part_files(spark, output):
         # coalesce(1) concatenates the file's splits in order, so the row index is file order.
         df = spark.read.parquet(path).coalesce(1).withColumn("_i", F.monotonically_increasing_id())
         ordered = Window.orderBy("_i")
@@ -76,13 +80,13 @@ def validate_terasort(spark: Any, tables: dict[str, str], output: str) -> dict[s
             .count()
         )
         if unsorted:
-            result["problem"] = f"{os.path.basename(path)}: {unsorted} keys out of order"
+            result["problem"] = f"{path.rsplit('/', 1)[-1]}: {unsorted} keys out of order"
             return result
         bounds = df.agg(F.min("key").alias("lo"), F.max("key").alias("hi")).first()
         if bounds["lo"] is None:
             continue  # empty file
         if previous_max is not None and bytes(bounds["lo"]) < previous_max:
-            result["problem"] = f"{os.path.basename(path)} starts below the previous file's end"
+            result["problem"] = f"{path.rsplit('/', 1)[-1]} starts below the previous file's end"
             return result
         previous_max = bytes(bounds["hi"])
     return result

@@ -97,6 +97,19 @@
           "title": "Deploy Mode",
           "type": "string"
         },
+        "docker_args": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Docker Args",
+          "type": "array"
+        },
+        "docker_network": {
+          "default": "host",
+          "title": "Docker Network",
+          "type": "string"
+        },
         "driver_memory": {
           "default": "2g",
           "pattern": "^[1-9][0-9]*[kmgt]$",
@@ -156,6 +169,18 @@
           "const": "external",
           "title": "Runner",
           "type": "string"
+        },
+        "spark_home": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spark Home"
         },
         "submit_args": {
           "default": [],

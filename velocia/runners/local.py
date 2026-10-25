@@ -20,6 +20,8 @@ import tempfile
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 
 from velocia.config.models import LocalCluster
@@ -105,7 +107,13 @@ def docker_command(app: AppSpec, cluster: LocalCluster, work_dir: Path) -> list[
     return cmd
 
 
-def driver_spec(app: AppSpec) -> dict[str, object]:
+def driver_spec(
+    app: AppSpec,
+    data_root: str = DATA_MOUNT,
+    work_root: str = WORK_MOUNT,
+    scratch_root: str | None = None,
+) -> dict[str, object]:
+    """``run.json`` for the driver; roots are paths as the driver sees them."""
     return {
         "version": 1,
         "run_id": app.run_id,
@@ -116,11 +124,12 @@ def driver_spec(app: AppSpec) -> dict[str, object]:
         "timeout_s": app.timeout_per_unit_s,
         "float_round_decimals": app.float_round_decimals,
         "units": app.units,
-        "tables": {t: f"{DATA_MOUNT}/{t}" for t in app.tables},
-        "output_dir": f"{WORK_MOUNT}/out",
-        "scratch_dir": f"{WORK_MOUNT}/scratch",  # job unit output, removed with the work dir
+        "tables": {t: f"{data_root}/{t}" for t in app.tables},
+        "output_dir": f"{work_root}/out",
+        # job unit output; removed with the work dir, or by the driver on a cluster's storage
+        "scratch_dir": scratch_root or f"{work_root}/scratch",
         "teragen": (
-            {**app.teragen, "output": f"{WORK_MOUNT}/{TERAGEN_OUTPUT}"} if app.teragen else None
+            {**app.teragen, "output": f"{work_root}/{TERAGEN_OUTPUT}"} if app.teragen else None
         ),
     }
 
@@ -172,6 +181,59 @@ def cpu_busy_pct(interval_s: float = 1.0) -> float | None:
         idle = re.findall(r"CPU usage:.*?([\d.]+)% idle", out.stdout)
         return 100.0 - float(idle[-1]) if idle else None  # the second sample is the interval
     return None
+
+
+def run_process(
+    cmd: list[str], timeout_s: float, on_timeout: Callable[[], None]
+) -> tuple[int, str, bool]:
+    """Run ``cmd``, keeping the last lines of its output; ``(exit code, tail, timed out)``.
+
+    After ``timeout_s`` it calls ``on_timeout`` (which should stop whatever the command
+    started, such as a container) and kills the command.
+    """
+    tail: deque[str] = deque(maxlen=LOG_TAIL_LINES)
+    timed_out = threading.Event()
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+    def expire() -> None:
+        timed_out.set()
+        on_timeout()
+        proc.kill()
+
+    timer = threading.Timer(timeout_s, expire)
+    timer.daemon = True
+    timer.start()
+    try:
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            tail.append(line.rstrip())
+        exit_code = proc.wait()
+    finally:
+        timer.cancel()
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+    return exit_code, "\n".join(tail), timed_out.is_set()
+
+
+def app_status(exit_code: int, timed_out: bool) -> AppStatus:
+    if timed_out:
+        return "timeout"
+    return "finished" if exit_code == 0 else "failed"
+
+
+def exit_notes(exit_code: int) -> list[str]:
+    if exit_code == OOM_KILLED:
+        return [
+            "killed (exit 137): out of memory; the container needed more than Docker "
+            "could give it. Give Docker more memory or lower executor_memory"
+        ]
+    if exit_code == JAVA_OOM:
+        return [
+            "Java heap out of memory (exit 52); raise executor_memory (and Docker's "
+            "memory if needed)"
+        ]
+    return []
 
 
 class LocalRunner:
@@ -247,60 +309,28 @@ class LocalRunner:
             app.task == "time" and app.mode == "cold" and self.drop_page_cache(app.image)
         )
         name = f"velocia-{app.run_id}"
-        tail: deque[str] = deque(maxlen=LOG_TAIL_LINES)
-        timed_out = threading.Event()
-
-        def on_timeout() -> None:
-            timed_out.set()
-            self._remove(name)
-
-        timer = threading.Timer(app.app_timeout_s, on_timeout)
-        timer.daemon = True
         started = time.time()
         started_mono = time.monotonic()
         self._containers.add(name)
         try:
-            proc = subprocess.Popen(
+            exit_code, tail, timed_out = run_process(
                 docker_command(app, self.cluster, work_dir),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
+                app.app_timeout_s,
+                partial(self._remove, name),
             )
-            timer.start()
-            assert proc.stdout is not None
-            for line in proc.stdout:
-                tail.append(line.rstrip())
-            exit_code = proc.wait()
         finally:
-            timer.cancel()
             self._remove(name)
-        status: AppStatus = "finished"
-        notes: list[str] = []
-        if timed_out.is_set():
-            status = "timeout"
-        elif exit_code != 0:
-            status = "failed"
-            if exit_code == OOM_KILLED:
-                notes.append(
-                    "killed (exit 137): out of memory; the container needed more than Docker "
-                    "could give it. Give Docker more memory or lower executor_memory"
-                )
-            elif exit_code == JAVA_OOM:
-                notes.append(
-                    "Java heap out of memory (exit 52); raise executor_memory (and Docker's "
-                    "memory if needed)"
-                )
         ended = time.time()
         return AppResult(
-            status=status,
+            status=app_status(exit_code, timed_out),
             exit_code=exit_code,
             work_dir=work_dir,
-            log_tail="\n".join(tail),
+            log_tail=tail,
             started_at=started,
             ended_at=ended,
             cache_dropped=cache_dropped,
             host_slept_s=host_slept_s(started, ended, started_mono, time.monotonic()),
-            notes=notes,
+            notes=exit_notes(exit_code),
         )
 
     def _remove(self, name: str) -> None:
