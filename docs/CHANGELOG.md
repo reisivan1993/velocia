@@ -1,5 +1,9 @@
 # Spec changelog
 
+## 2026-11-02 — fallback share (T37)
+
+- Event-log summaries gain `fallback_task_ms`: task run time in stages none of whose RDDs comes from an accelerated operator (RDD name or scope matching `Comet*`, `Gluten*`, `Velox*`, `Gpu*`, `*Transformer`). Formula input `unit.fallback_share` (fallback / task run time). Report JSON `plan_markers` gains `fallback_share` per cell (null for summaries stored before this change); the plan-marker tables show it.
+
 ## 2026-11-02 — PageRank and KMeans; tolerance checks (T29, T30)
 
 - `velocia datagen --suite graph --rows N` (edges; rows / 10 vertices; targets Zipf 1.0; table `graph(src, dst)`) and `--suite kmeans --rows N` (10 dimensions around 8 centers; table `kmeans(f0..f9)`) instead of 03 §2's `--vertices/--edges` and `--points/--dims` (one `rows` field, as for the other job suites).

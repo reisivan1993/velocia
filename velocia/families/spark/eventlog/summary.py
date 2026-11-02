@@ -10,10 +10,16 @@ row/columnar transitions (``ColumnarToRow``, ``RowToColumnar`` and engine varian
 ``CometColumnarToRow``) and accelerated operators (``Comet*``, ``Gluten*``, ``Velox*``, ``Gpu*``,
 ``*Transformer``). A transition inside an accelerated plan is a fallback to row-based Spark.
 
+Fallback share: a stage is accelerated when any of its RDDs comes from an accelerated operator
+(RDD name or scope such as ``CometExchange``); task time in other stages ran on vanilla Spark.
+For an RDD job on an accelerated engine that share is ~100%.
+
 In opaque mode (third-party jobs without tags) the whole application is one unit, timed from
 application start to end.
 """
 
+import contextlib
+import json
 import re
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
@@ -60,6 +66,7 @@ class UnitSummary:
     plan_operators: int = 0
     plan_transitions: int = 0
     plan_accelerated: int = 0
+    fallback_task_ms: int = 0  # task run time in stages without accelerated operators
     wall_ms: int | None = None  # opaque mode only: application start to end
 
     def telemetry(self) -> dict[str, float]:
@@ -81,6 +88,9 @@ class UnitSummary:
             "plan_transitions": self.plan_transitions,
             "plan_accelerated_share": (
                 self.plan_accelerated / self.plan_operators if self.plan_operators else 0.0
+            ),
+            "fallback_share": (
+                self.fallback_task_ms / self.task_run_ms if self.task_run_ms else 0.0
             ),
         }
 
@@ -117,7 +127,19 @@ def _count_plan(plan: dict[str, Any]) -> tuple[int, int, int]:
     return operators, transitions, accelerated
 
 
-def _add_task(unit: UnitSummary, event: dict[str, Any]) -> None:
+def _stage_accelerated(info: dict[str, Any]) -> bool:
+    for rdd in info.get("RDD Info") or []:
+        scope = rdd.get("Scope")
+        names = [rdd.get("Name") or ""]
+        if scope:
+            with contextlib.suppress(ValueError, AttributeError):  # malformed scope: skip it
+                names.append(json.loads(scope).get("name") or "")
+        if any(ACCELERATED.search(n) for n in names):
+            return True
+    return False
+
+
+def _add_task(unit: UnitSummary, event: dict[str, Any], accelerated: bool = False) -> None:
     unit.tasks += 1
     reason = (event.get("Task End Reason") or {}).get("Reason")
     if reason not in (None, "Success"):
@@ -126,6 +148,8 @@ def _add_task(unit: UnitSummary, event: dict[str, Any]) -> None:
     if not m:
         return
     unit.task_run_ms += m.get("Executor Run Time", 0)
+    if not accelerated:
+        unit.fallback_task_ms += m.get("Executor Run Time", 0)
     unit.task_cpu_ns += m.get("Executor CPU Time", 0)
     unit.gc_ms += m.get("JVM GC Time", 0)
     unit.memory_spill_bytes += m.get("Memory Bytes Spilled", 0)
@@ -148,6 +172,7 @@ def summarize_events(
     app = AppSummary()
     job_unit: dict[int, UnitKey] = {}
     stage_unit: dict[int, UnitKey] = {}
+    accelerated_stages: set[int] = set()
     executions: dict[int, dict[str, Any]] = {}  # live root SQL executions
 
     def unit_for(key: UnitKey) -> UnitSummary:
@@ -163,7 +188,12 @@ def summarize_events(
             if key is None:
                 app.untagged_tasks += 1
             else:
-                _add_task(unit_for(key), event)
+                stage = event.get("Stage ID", -1)
+                _add_task(unit_for(key), event, stage in accelerated_stages)
+        elif kind == "SparkListenerStageSubmitted":
+            info = event.get("Stage Info") or {}
+            if _stage_accelerated(info):
+                accelerated_stages.add(info.get("Stage ID", -1))
         elif kind == "SparkListenerJobStart":
             tag = parse_tag((event.get("Properties") or {}).get("spark.job.description"))
             key = opaque_key or ((tag[1], tag[2]) if tag else None)

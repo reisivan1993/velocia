@@ -145,7 +145,8 @@ def build_report(catalog: Catalog, experiment_id: str) -> dict[str, Any]:
 
 
 def _plan_markers(catalog: Catalog, experiment_id: str) -> dict[str, dict[str, Any]]:
-    """Per cell, from its first timed repetition: operators, accelerated ones, transitions."""
+    """Per cell, from its first timed repetition: operators, accelerated ones, transitions,
+    and the share of task time in stages without accelerated operators (fallback)."""
     rows = catalog.query(
         "SELECT r.cell_key, u.unit_id, u.rep, u.summary FROM unit_run u JOIN run r USING (run_id) "
         "WHERE r.experiment_id = ? AND NOT u.discarded AND u.summary IS NOT NULL "
@@ -159,10 +160,20 @@ def _plan_markers(catalog: Catalog, experiment_id: str) -> dict[str, dict[str, A
         if row["rep"] != rep:
             continue
         summary = json.loads(row["summary"])
-        m = out.setdefault(row["cell_key"], {"operators": 0, "accelerated": 0, "transitions": 0})
+        m = out.setdefault(
+            row["cell_key"],
+            {"operators": 0, "accelerated": 0, "transitions": 0, "task_ms": 0, "fallback_ms": 0},
+        )
         m["operators"] += summary["plan_operators"]
         m["accelerated"] += summary["plan_accelerated"]
         m["transitions"] += summary["plan_transitions"]
+        m["task_ms"] += summary["task_run_ms"]
+        m["fallback_ms"] += summary.get("fallback_task_ms") or 0
+        # Summaries stored before fallback tracking existed make the share unknown, not zero.
+        m["known"] = m.get("known", True) and "fallback_task_ms" in summary
+    for m in out.values():
+        task_ms, fallback_ms, known = m.pop("task_ms"), m.pop("fallback_ms"), m.pop("known")
+        m["fallback_share"] = fallback_ms / task_ms if known and task_ms else None
     return out
 
 
@@ -377,10 +388,11 @@ def render_markdown(report: dict[str, Any]) -> str:
             "## Plan markers",
             "",
             "From each engine's first timed repetition, all units: operators in the final SQL "
-            "plans, how many ran on an accelerator, and row/columnar transitions (fallbacks).",
+            "plans, how many ran on an accelerator, row/columnar transitions, and the share of "
+            "task time in stages without accelerated operators (fallback).",
             "",
-            "| engine | mode | operators | accelerated | transitions |",
-            "| --- | --- | ---: | ---: | ---: |",
+            "| engine | mode | operators | accelerated | transitions | fallback |",
+            "| --- | --- | ---: | ---: | ---: | ---: |",
         ]
         for key, cell in cells.items():
             m = markers.get(key)
@@ -388,7 +400,9 @@ def render_markdown(report: dict[str, Any]) -> str:
                 share = m["accelerated"] / m["operators"] if m["operators"] else 0
                 out.append(
                     f"| {cell['engine']} | {cell['mode_label']} | {m['operators']} | "
-                    f"{m['accelerated']} ({share:.0%}) | {m['transitions']} |"
+                    f"{m['accelerated']} ({share:.0%}) | {m['transitions']} | "
+                    + ("n/a" if m.get("fallback_share") is None else f"{m['fallback_share']:.0%}")
+                    + " |"
                 )
         out.append("")
     if report["flags"]:

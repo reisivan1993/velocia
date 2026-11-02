@@ -188,15 +188,16 @@ comparison:</strong> cells ran on different hardware.{% endif %}</p>
 {% if report.plan_markers %}
 <h2>Plan markers</h2>
 <p class="note">From each engine's first timed repetition, all units: operators in the final
-SQL plans, how many ran on an accelerator, and row/columnar transitions.</p>
+SQL plans, how many ran on an accelerator, row/columnar transitions, and the share of task time
+in stages without accelerated operators (fallback).</p>
 <div class="table-wrap"><table>
-<thead><tr><th>engine</th><th>mode</th><th class="num">operators</th><th class="num">accelerated</th><th class="num">transitions</th></tr></thead>
+<thead><tr><th>engine</th><th>mode</th><th class="num">operators</th><th class="num">accelerated</th><th class="num">transitions</th><th class="num">fallback</th></tr></thead>
 <tbody>
 {% for c in report.cells if report.plan_markers.get(c.cell_key) %}
 {% set pm = report.plan_markers[c.cell_key] %}
 <tr><td>{{ c.engine }}</td><td>{{ c.mode_label }}</td><td class="num">{{ pm.operators }}</td>
 <td class="num">{{ pm.accelerated }}{% if pm.operators %} ({{ (pm.accelerated / pm.operators)|pct }}){% endif %}</td>
-<td class="num">{{ pm.transitions }}</td></tr>
+<td class="num">{{ pm.transitions }}</td><td class="num">{{ pm.fallback_share|pct if pm.fallback_share is not none else "n/a" }}</td></tr>
 {% endfor %}
 </tbody></table></div>
 {% endif %}

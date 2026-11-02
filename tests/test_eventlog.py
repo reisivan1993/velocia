@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 import zstandard
@@ -121,3 +122,42 @@ def test_golden_comet_log_shows_acceleration_and_transitions() -> None:
     assert comet.plan_transitions >= 1  # back to rows for the result
     # Same data read by both engines.
     assert comet.input_rows == vanilla.input_rows
+
+
+def _stage_submitted(stage_id: int, *rdds: tuple[str, str | None]) -> dict[str, Any]:
+    return {
+        "Event": "SparkListenerStageSubmitted",
+        "Stage Info": {
+            "Stage ID": stage_id,
+            "RDD Info": [
+                {"Name": name, "Scope": json.dumps({"id": "1", "name": scope}) if scope else None}
+                for name, scope in rdds
+            ],
+        },
+    }
+
+
+def test_fallback_share_of_rdd_and_sql_units() -> None:
+    from eventlogs import job_start, stage_completed, task_end
+
+    from velocia.families.spark.eventlog.summary import summarize_events
+
+    rdd, sql = "velocia:r:rdd_job:1", "velocia:r:sql_unit:1"
+    events = [
+        # An RDD job on an accelerated engine: no accelerated operator anywhere.
+        job_start(0, [0], rdd),
+        _stage_submitted(0, ("MapPartitionsRDD", "map"), ("ParallelCollectionRDD", "parallelize")),
+        task_end(0, run_ms=900),
+        stage_completed(0),
+        # A SQL unit: one Comet stage, one stage that fell back.
+        job_start(1, [1, 2], sql),
+        _stage_submitted(1, ("CometShuffledBatchRDD", "CometExchange")),
+        task_end(1, run_ms=750),
+        stage_completed(1),
+        _stage_submitted(2, ("MapPartitionsRDD", "WholeStageCodegen (1)")),
+        task_end(2, run_ms=250),
+        stage_completed(2),
+    ]
+    units = summarize_events(events).units
+    assert units[("rdd_job", 1)].telemetry()["fallback_share"] == 1.0
+    assert units[("sql_unit", 1)].telemetry()["fallback_share"] == 0.25

@@ -2,6 +2,7 @@
   "_setup:0": {
     "disk_spill_bytes": 0,
     "failed_tasks": 0,
+    "fallback_task_ms": 107,
     "gc_ms": 8,
     "input_bytes": 0,
     "input_rows": 0,
@@ -27,6 +28,7 @@
   "q1:1": {
     "disk_spill_bytes": 0,
     "failed_tasks": 0,
+    "fallback_task_ms": 438,
     "gc_ms": 19,
     "input_bytes": 474161,
     "input_rows": 60175,
@@ -52,6 +54,7 @@
   "q6:1": {
     "disk_spill_bytes": 0,
     "failed_tasks": 0,
+    "fallback_task_ms": 24,
     "gc_ms": 3,
     "input_bytes": 498890,
     "input_rows": 60175,

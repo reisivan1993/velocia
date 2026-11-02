@@ -52,7 +52,8 @@ Formulas are parsed, never executed: numbers, `+ - * / // % **`, `min`, `max`, `
 
 - `unit.`: `wall_s`, `task_cpu_s`, `task_run_s`, `gc_s`, `input_rows`, `input_bytes`,
   `output_rows`, `output_bytes`, `shuffle_read_bytes`, `shuffle_write_bytes`, `shuffle_bytes`,
-  `spill_bytes`, `stages`, `tasks`
+  `spill_bytes`, `stages`, `tasks`, `plan_transitions`, `plan_accelerated_share`,
+  `fallback_share` (share of task time in stages without accelerated operators)
 - `cluster.`: `nodes`, `executors`, `executor_cores`, `executor_memory_gb`
 - `hw.`: `price_per_node_hour_usd`, `watts_per_node`, `accelerators_per_node` and every `custom`
   coefficient of the hardware profile
