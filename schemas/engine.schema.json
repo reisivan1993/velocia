@@ -34,6 +34,14 @@
       "default": null,
       "title": "Notes"
     },
+    "platforms": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Platforms",
+      "type": "array"
+    },
     "spark_conf": {
       "additionalProperties": {
         "type": "string"

@@ -6,10 +6,15 @@ An engine is a container image plus Spark configuration. Built in:
 | --- | --- |
 | `spark-vanilla` | the official Apache Spark 3.5.9 image (Java 17, Python 3), pinned by digest |
 | `spark-comet` | the same base with Apache DataFusion Comet 1.1.0 and its Spark configuration |
+| `spark-gluten` | the same base with Apache Gluten 1.7.0 (Velox backend); **x86 (linux/amd64) only** |
 
 `velocia engines list` shows them; `velocia engines build <name>` builds an image locally.
 Velocia's driver program is shipped with each run, not baked into images, so any image with
 Apache Spark 3.5 and Python 3 works.
+
+Gluten's official build has native code for x86 only. On Apple silicon (arm64 Docker) Velocia
+refuses it before starting, because under emulation it crashes; run it on an x86 machine or
+cluster. An engine file declares this with `platforms: [linux/amd64]`.
 
 ## Adding an engine
 
@@ -24,6 +29,7 @@ spark_conf:
   spark.plugins: com.example.AcceleratorPlugin
   spark.memory.offHeap.enabled: "true"
   spark.memory.offHeap.size: 2g
+platforms: [linux/amd64]          # optional: where the image runs natively
 notes: "Vendor accelerator X, driver 1.2"
 ```
 

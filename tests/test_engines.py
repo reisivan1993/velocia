@@ -54,3 +54,31 @@ def test_builtin_image_builds_and_reports_spark_35(name: str) -> None:
         engine.definition.image, "/opt/spark/bin/spark-submit", "--version", timeout=120
     )
     assert "version 3.5." in output
+
+
+def test_engine_platforms_are_checked_where_containers_run() -> None:
+    from velocia.config.models import Experiment
+    from velocia.engines.registry import load_engines
+    from velocia.orchestrator.run import RunError, check_platforms
+
+    known = load_engines(None)
+    assert known["spark-gluten"].definition.platforms == ["linux/amd64"]
+    experiment = Experiment.model_validate(
+        {
+            "name": "g",
+            "workload": {"kind": "sql", "suite": "tpch", "scale_factor": 1},
+            "engines": ["spark-vanilla", "spark-gluten"],
+            "reference_engine": "spark-vanilla",
+            "cluster": {
+                "runner": "local",
+                "executors": 1,
+                "executor_cores": 1,
+                "executor_memory": "1g",
+            },
+        }
+    )
+    clusters = experiment.named_clusters
+    check_platforms(experiment, known, clusters, lambda: "linux/amd64")
+    check_platforms(experiment, known, clusters, lambda: None)  # unknown: let it run
+    with pytest.raises(RunError, match="spark-gluten runs on linux/amd64 only"):
+        check_platforms(experiment, known, clusters, lambda: "linux/arm64")

@@ -385,6 +385,8 @@ class EngineDef(StrictModel):
     image: str = Field(min_length=1)
     spark_versions: Annotated[list[str], Field(min_length=1)]
     spark_conf: dict[str, str] = {}
+    # Docker platforms the image runs on natively, e.g. [linux/amd64]; empty means any.
+    platforms: list[str] = []
     notes: str | None = None
 
 

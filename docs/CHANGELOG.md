@@ -1,5 +1,11 @@
 # Spec changelog
 
+## 2026-11-02 — Gluten engine (T27)
+
+- Built-in engine `spark-gluten`: Apache Spark 3.5.9 with Apache Gluten 1.7.0 (Velox), from the official binary release (checksum-pinned). Its native libraries are linux/amd64 only.
+- Engine definitions gain `platforms` (Docker platforms the image runs on natively; empty = any). `velocia run` and `engines check` refuse an engine whose platforms don't include the local Docker's where Velocia starts the containers (local runner, external runner in Docker), instead of letting native code crash under emulation.
+- CI job `gluten` (amd64): engine check and all 22 TPC-H-derived queries at SF1 with correctness against vanilla.
+
 ## 2026-11-02 — bring-your-own Python jobs (T32, part)
 
 - `workload: {kind: job, suite: custom, dataset_id, units, job: {artifact, entrypoint, validator?}}` runs a Python job: `artifact` is a `.py` or `.zip` (relative to the experiment file, shipped with `--py-files`), `entrypoint` and `validator` are `module:function` (or `function` of the artifact's module), called as `fn(spark, tables, scratch)`. Units are the experiment's `units`, recorded by the job with `with velocia.unit("<id>"):`; with `units: all` the job is one opaque unit `app` timed around the call. A validator returns `{unit_id: {rows, checksum, problem?, values?, tolerance?}}` or one such dict for every unit; without it units are `not_checked`.

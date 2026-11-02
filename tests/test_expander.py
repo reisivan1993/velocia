@@ -233,9 +233,10 @@ def test_cli_dry_run() -> None:
         assert cell.cell_key in result.output
 
 
-def test_cli_dry_run_rejects_unknown_engines() -> None:
-    result = CliRunner().invoke(
-        app, ["run", str(VALID / "experiment-tpch-engines-sf10.yaml"), "--dry-run"]
-    )
+def test_cli_dry_run_rejects_unknown_engines(tmp_path: Path) -> None:
+    text = (VALID / "experiment-tpch-engines-sf10.yaml").read_text()
+    path = tmp_path / "exp.yaml"
+    path.write_text(text.replace("spark-gluten", "spark-nonexistent"))
+    result = CliRunner().invoke(app, ["run", str(path), "--dry-run"])
     assert result.exit_code == 1
-    assert "unknown engine(s): spark-gluten" in result.output
+    assert "unknown engine(s): spark-nonexistent" in result.output

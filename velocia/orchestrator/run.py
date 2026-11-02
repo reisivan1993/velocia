@@ -46,7 +46,7 @@ from velocia.families.spark.eventlog.reader import EventLogError
 from velocia.families.spark.eventlog.summary import UnitSummary
 from velocia.families.spark.eventlog.summary import summarize as summarize_log
 from velocia.families.spark.package import DriverPackage, build_driver
-from velocia.hardware.probe import hardware_manifest_hash, probe_local
+from velocia.hardware.probe import docker_platform, hardware_manifest_hash, probe_local
 from velocia.measures.builtins import ClusterInputs, Measure, UnitInputs
 from velocia.measures.formula import parse, unknown_hw_inputs
 from velocia.measures.plugins import PluginError
@@ -177,6 +177,7 @@ def prepare(path: Path, config: VelociaConfig, cluster_gate: bool = True) -> Pre
 
     check_hardware(experiment, profiles, [available[m] for m in experiment.measures])
     warnings += memory_warnings(experiment, known, clusters)
+    check_platforms(experiment, known, clusters, docker_platform)
 
     for measure in [available[m] for m in experiment.measures]:
         if measure.formula is None:
@@ -266,6 +267,36 @@ def _load_dataset(results_dir: Path, ds_id: str, how: str) -> DatasetManifest:
     if not Path(dataset.location).is_dir():
         raise RunError(f"dataset {ds_id}: data directory {dataset.location} is missing")
     return dataset
+
+
+def check_platforms(
+    experiment: Experiment,
+    known: dict[str, Engine],
+    clusters: dict[str, Cluster],
+    platform: Callable[[], str | None],
+) -> None:
+    """Refuse an engine whose image doesn't run natively where its driver would run.
+
+    Native accelerator libraries crash under emulation (Gluten's Velox build on arm64 Docker
+    dies with SIGILL), so a clear refusal beats a broken benchmark. Applies where Velocia
+    starts containers: the local runner and the external runner's Docker submission.
+    """
+    here: str | None = None
+    for ref in experiment.engine_refs:
+        platforms = known[ref.name].definition.platforms
+        cluster = clusters[ref.cluster or next(iter(clusters))]
+        in_docker = isinstance(cluster, LocalCluster) or (
+            isinstance(cluster, ExternalCluster) and cluster.spark_home is None
+        )
+        if not platforms or not in_docker:
+            continue
+        here = here or platform()
+        if here is not None and here not in platforms:
+            raise RunError(
+                f"{ref.name} runs on {', '.join(platforms)} only, but Docker here runs {here} "
+                "(emulation crashes native engine code); run it on a matching machine or "
+                "cluster"
+            )
 
 
 def memory_warnings(

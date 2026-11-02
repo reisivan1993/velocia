@@ -73,6 +73,21 @@ def _docker() -> dict[str, Any] | None:
     }
 
 
+DOCKER_ARCH = {
+    "x86_64": "linux/amd64",
+    "amd64": "linux/amd64",
+    "aarch64": "linux/arm64",
+    "arm64": "linux/arm64",
+}
+
+
+def docker_platform() -> str | None:
+    """The platform Docker runs containers on natively, e.g. ``linux/arm64``; None if unknown."""
+    docker = _docker()
+    arch = (docker or {}).get("arch")
+    return DOCKER_ARCH.get(str(arch).lower()) if arch else None
+
+
 def probe_local(profile: HardwareProfile | None = None) -> dict[str, Any]:
     """What the manifest records about the ``local`` runner's single node."""
     accelerators = None

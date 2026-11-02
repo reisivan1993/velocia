@@ -1,0 +1,13 @@
+name: spark-gluten
+family: spark
+image: velocia/engine-spark-gluten:3.5.9-gluten1.7.0
+spark_versions: ["3.5"]
+platforms: [linux/amd64]  # Gluten's official Velox build has no arm64 native libraries
+spark_conf:
+  spark.plugins: org.apache.gluten.GlutenPlugin
+  spark.shuffle.manager: org.apache.spark.shuffle.sort.ColumnarShuffleManager
+  spark.memory.offHeap.enabled: "true"
+  # Sizing default for small runs; experiments override it via spark_conf for real clusters.
+  spark.memory.offHeap.size: 2g
+  spark.gluten.sql.columnar.forceShuffledHashJoin: "true"
+notes: "Apache Gluten 1.7.0 (Velox) on Apache Spark 3.5.9, built from velocia/engines/builtin/spark-gluten/Dockerfile"

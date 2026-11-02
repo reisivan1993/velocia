@@ -77,6 +77,36 @@ jobs:
             ${{ runner.temp }}/pytest/**/checks.json
           retention-days: 7
 
+  gluten:
+    # Second accelerated engine (T27). Gluten's Velox build is linux/amd64 only, like these
+    # runners; Apple silicon Docker can't run it.
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+      - run: uv sync --locked
+      - name: Build engine images
+        run: |
+          uv run velocia engines build spark-vanilla
+          uv run velocia engines build spark-gluten
+      - name: Engine check and TPC-H-derived SF1 correctness
+        run: uv run pytest -m docker --basetemp=${{ runner.temp }}/pytest tests/test_gluten.py
+      - name: Keep reports of failed tests
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-reports-gluten
+          path: |
+            ${{ runner.temp }}/pytest/**/report.json
+            ${{ runner.temp }}/pytest/**/report.md
+            ${{ runner.temp }}/pytest/**/driver.log
+            ${{ runner.temp }}/pytest/**/checks.json
+          retention-days: 7
+
   nightly:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     needs: checks
