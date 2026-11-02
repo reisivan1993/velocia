@@ -61,11 +61,24 @@ class Fs:
         finally:
             stream.close()
 
+    def _local(self) -> Any:
+        # The raw local filesystem: no .crc side files next to downloaded logs.
+        return self._jvm.org.apache.hadoop.fs.FileSystem.getLocal(self._conf).getRaw()
+
+    def _copy(self, src_fs: Any, src: str, dst_fs: Any, dst: str) -> None:
+        # Stream copy, not copyFromLocalFile: s3a's version fails on single files
+        # ("Cannot get relative path for URI").
+        ok = self._jvm.org.apache.hadoop.fs.FileUtil.copy(
+            src_fs, self._path(src), dst_fs, self._path(dst), False, True, self._conf
+        )
+        if not ok:
+            raise OSError(f"copy {src} -> {dst} failed")
+
     def upload(self, local: str, uri: str) -> None:
-        self._fs(uri).copyFromLocalFile(False, True, self._path(local), self._path(uri))
+        self._copy(self._local(), local, self._fs(uri), uri)
 
     def download(self, uri: str, local: str) -> None:
-        self._fs(uri).copyToLocalFile(False, self._path(uri), self._path(local), True)
+        self._copy(self._fs(uri), uri, self._local(), local)
 
     def delete(self, uri: str) -> None:
         self._fs(uri).delete(self._path(uri), True)

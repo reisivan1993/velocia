@@ -96,8 +96,12 @@ def declared_hardware(
     }
 
 
+IVY_DIR = "/tmp/ivy2"  # the image user's home may not be writable; --packages needs a cache
+
+
 def submit_conf(cluster: ExternalCluster, app: AppSpec, driver_host: str | None) -> dict[str, str]:
     conf = {
+        **({"spark.jars.ivy": IVY_DIR} if cluster.spark_home is None else {}),
         **app.spark_conf,
         "spark.executor.instances": str(cluster.executors),
         "spark.executor.cores": str(cluster.executor_cores),

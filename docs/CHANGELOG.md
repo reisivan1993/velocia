@@ -1,5 +1,9 @@
 # Spec changelog
 
+## 2026-11-03 — external runner on S3 (T42)
+
+- Nightly test: the external runner against a standalone cluster with S3 storage (`s3a`, SeaweedFS's S3 gateway; MinIO no longer publishes container images), `hadoop-aws` fetched with `--packages`. It found two problems, both fixed: s3a's `copyFromLocalFile` fails on single files ("Cannot get relative path"), so dataset upload and event-log download now stream through Hadoop's `FileUtil.copy`; and the Spark image's user has no writable home, so the external runner sets `spark.jars.ivy=/tmp/ivy2` when submitting from Docker (overridable).
+
 ## 2026-11-02 — viewer (T46, T47)
 
 - `velocia ui [--port N] [--host LOOPBACK]`: experiments (with each candidate engine's total ratio and CI), each experiment's report rendered fresh from the catalog (and its JSON), compare of two experiments, and an experiment name's history (total ratio with CI over time). Binds to loopback only; GET only; the catalog is opened read-only and reports are redacted again before display. `--results-dir` (in 04 §1) is dropped: the results directory comes from `velocia.yaml` like every other command.

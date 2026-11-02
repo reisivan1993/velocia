@@ -62,8 +62,21 @@ next to time. The report carries a cross-hardware banner.
 | `docker_network` | Network of the submitting container (default `host`) |
 | `docker_args` | Extra `docker run` arguments for the submitting container, e.g. mounts |
 
-Credentials (S3 keys, Kerberos) come from the environment or Spark configuration; secrets in
-Spark configuration are redacted from everything Velocia writes.
+Storage settings belong to the cluster, so put them in `submit_args` (they then apply to the
+engine check too). For S3 through `s3a`, Spark needs the `hadoop-aws` package that matches its
+Hadoop client (3.3.4 for Apache Spark 3.5) unless the cluster's Spark already has it:
+
+```yaml
+    submit_args: ["--packages", "org.apache.hadoop:hadoop-aws:3.3.4",
+                  "--conf", "spark.hadoop.fs.s3a.endpoint=https://s3.example.com",
+                  "--conf", "spark.hadoop.fs.s3a.access.key=...",
+                  "--conf", "spark.hadoop.fs.s3a.secret.key=..."]
+```
+
+When submitting from Docker, `--packages` downloads go to `/tmp/ivy2` in the container; mount a
+directory there with `docker_args: ["-v", "/some/cache:/tmp/ivy2"]` to download them once.
+Credentials can also come from the environment (`docker_args: ["--env-file", ...]`). Secrets
+in Spark configuration and `submit_args` are redacted from everything Velocia writes.
 
 ## Smoke test first
 
