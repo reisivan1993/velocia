@@ -142,7 +142,9 @@ def _add_task(unit: UnitSummary, event: dict[str, Any]) -> None:
     unit.shuffle_write_bytes += sw.get("Shuffle Bytes Written", 0)
 
 
-def summarize_events(events: Iterable[dict[str, Any]], opaque_unit: str | None = None) -> AppSummary:
+def summarize_events(
+    events: Iterable[dict[str, Any]], opaque_unit: str | None = None
+) -> AppSummary:
     app = AppSummary()
     job_unit: dict[int, UnitKey] = {}
     stage_unit: dict[int, UnitKey] = {}
@@ -184,7 +186,9 @@ def summarize_events(events: Iterable[dict[str, Any]], opaque_unit: str | None =
             key = opaque_key or ((tag[1], tag[2]) if tag else None)
             if key is not None and root == event["executionId"]:
                 executions[event["executionId"]] = {
-                    "key": key, "start": event.get("time"), "plan": event.get("sparkPlanInfo"),
+                    "key": key,
+                    "start": event.get("time"),
+                    "plan": event.get("sparkPlanInfo"),
                 }
         elif kind.endswith("SQLAdaptiveExecutionUpdate"):
             live = executions.get(event.get("executionId", -1))
