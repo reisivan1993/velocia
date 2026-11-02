@@ -33,6 +33,7 @@ from velocia.config.models import (
     Mode,
     Suite,
     VelociaConfig,
+    WorkloadKind,
 )
 from velocia.datagen.duckdb_tpc import dataset_id as make_dataset_id
 from velocia.datagen.manifest import DatasetManifest, results_label
@@ -58,6 +59,8 @@ from velocia.store.catalog import Catalog, as_json
 from velocia.workloads import Unit, UnknownUnitError, get_workload, select_units
 from velocia.workloads.synth import render_sql, synth_spec
 
+OPAQUE_UNIT = "app"  # a bring-your-own job that doesn't use the velocia.unit helper
+
 TOTAL_UNIT = "_total"  # sum over all units of one repetition; only when every unit finished
 APP_OVERHEAD_S = 600.0
 
@@ -78,6 +81,7 @@ class Prepared:
     profiles: dict[str, HardwareProfile | None]  # by cluster name
     warnings: list[str]
     datasets: dict[str, DatasetManifest] = field(default_factory=dict)  # synth: by config_hash
+    custom_job: dict[str, str | None] | None = None  # bring-your-own job: artifact (absolute)
 
     def dataset_for(self, cell: Cell) -> DatasetManifest:
         return self.datasets.get(cell.config_hash, self.dataset)
@@ -114,13 +118,18 @@ def prepare(path: Path, config: VelociaConfig, cluster_gate: bool = True) -> Pre
     unknown = [r.name for r in experiment.engine_refs if r.name not in known]
     if unknown:
         raise RunError(f"unknown engine(s): {', '.join(unknown)}")
-    workload = get_workload(experiment.workload.suite)
-    if workload is None:
-        raise RunError(f"suite {experiment.workload.suite.value!r} has no workload yet")
-    try:
-        units = select_units(workload, experiment.workload.units)
-    except UnknownUnitError as exc:
-        raise RunError(str(exc)) from exc
+    custom_job: dict[str, str | None] | None = None
+    job = experiment.workload.job
+    if experiment.workload.suite is Suite.custom and job is not None:
+        units, custom_job = _custom_job(path, experiment)
+    else:
+        workload = get_workload(experiment.workload.suite)
+        if workload is None:
+            raise RunError(f"suite {experiment.workload.suite.value!r} has no workload yet")
+        try:
+            units = select_units(workload, experiment.workload.units)
+        except UnknownUnitError as exc:
+            raise RunError(str(exc)) from exc
     try:
         available = load_measures(Path(config.measures_dir))
     except ConfigError as exc:
@@ -217,6 +226,7 @@ def prepare(path: Path, config: VelociaConfig, cluster_gate: bool = True) -> Pre
         units=units,
         dataset=dataset,
         datasets=datasets,
+        custom_job=custom_job,
         measures=[available[m] for m in experiment.measures],
         profiles=profiles,
         warnings=[*experiment.warnings(), *warnings],
@@ -224,6 +234,28 @@ def prepare(path: Path, config: VelociaConfig, cluster_gate: bool = True) -> Pre
 
 
 MEMORY_HEADROOM = 0.85  # of Docker's memory; the rest is for the VM and other containers
+
+
+def _custom_job(path: Path, experiment: Experiment) -> tuple[list[Unit], dict[str, str | None]]:
+    """A bring-your-own Python job: its declared units (or one opaque unit) and artifact.
+
+    The artifact path is relative to the experiment file. Jar artifacts are not supported yet.
+    """
+    job = experiment.workload.job
+    assert job is not None
+    artifact = (path.parent / job.artifact).resolve()
+    if not artifact.is_file():
+        raise RunError(f"workload.job.artifact: {artifact} not found")
+    if artifact.suffix not in (".py", ".zip"):
+        raise RunError("workload.job.artifact: only Python jobs (.py or .zip) are supported so far")
+    wanted = experiment.workload.units
+    ids = [OPAQUE_UNIT] if wanted == "all" else list(wanted)
+    units = [Unit(id=i, kind=WorkloadKind.job, job="custom") for i in ids]
+    return units, {
+        "artifact": str(artifact),
+        "entrypoint": job.entrypoint,
+        "validator": job.validator,
+    }
 
 
 def _load_dataset(results_dir: Path, ds_id: str, how: str) -> DatasetManifest:
@@ -496,6 +528,7 @@ class Orchestrator:
                 dataset_location=Path(dataset.location),
                 tables=[t.name for t in dataset.tables],
                 dataset_id=dataset.dataset_id,
+                custom=self.p.custom_job,
                 timeout_per_unit_s=timeout_s,
                 app_timeout_s=APP_OVERHEAD_S + passes * len(self.p.units) * timeout_s,
                 float_round_decimals=self.config.correctness.float_round_decimals,

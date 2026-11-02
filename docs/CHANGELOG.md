@@ -1,5 +1,10 @@
 # Spec changelog
 
+## 2026-11-02 — bring-your-own Python jobs (T32, part)
+
+- `workload: {kind: job, suite: custom, dataset_id, units, job: {artifact, entrypoint, validator?}}` runs a Python job: `artifact` is a `.py` or `.zip` (relative to the experiment file, shipped with `--py-files`), `entrypoint` and `validator` are `module:function` (or `function` of the artifact's module), called as `fn(spark, tables, scratch)`. Units are the experiment's `units`, recorded by the job with `with velocia.unit("<id>"):`; with `units: all` the job is one opaque unit `app` timed around the call. A validator returns `{unit_id: {rows, checksum, problem?, values?, tolerance?}}` or one such dict for every unit; without it units are `not_checked`.
+- `run.json` gains `custom: {path, entrypoint, validator}`. Not yet: jar artifacts and opaque third-party applications timed from the event log (03 §1.2; the Scala helper follows with them).
+
 ## 2026-11-02 — fallback share (T37)
 
 - Event-log summaries gain `fallback_task_ms`: task run time in stages none of whose RDDs comes from an accelerated operator (RDD name or scope matching `Comet*`, `Gluten*`, `Velox*`, `Gpu*`, `*Transformer`). Formula input `unit.fallback_share` (fallback / task run time). Report JSON `plan_markers` gains `fallback_share` per cell (null for summaries stored before this change); the plan-marker tables show it.

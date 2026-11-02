@@ -30,6 +30,7 @@ from velocia.runners.base import AppResult, AppSpec, AppStatus, QuietCheck
 LABEL = "io.velocia.run_id"
 DATA_MOUNT = "/velocia/data"
 DRIVER_MOUNT = "/velocia/driver"
+CUSTOM_MOUNT = "/velocia/custom"
 WORK_MOUNT = "/velocia/work"
 LOG_TAIL_LINES = 40
 ERROR_LINES = 10
@@ -109,6 +110,7 @@ def docker_command(app: AppSpec, cluster: LocalCluster, work_dir: Path) -> list[
         f"{app.driver.zip_path.parent.resolve()}:{DRIVER_MOUNT}:ro",
         "-v",
         f"{work_dir.resolve()}:{WORK_MOUNT}",
+        *custom_mount(app),
         app.image,
         "/opt/spark/bin/spark-submit",
         "--master",
@@ -118,7 +120,7 @@ def docker_command(app: AppSpec, cluster: LocalCluster, work_dir: Path) -> list[
         cmd += ["--conf", f"{key}={value}"]
     cmd += [
         "--py-files",
-        f"{DRIVER_MOUNT}/{app.driver.zip_path.name}",
+        py_files(app, DRIVER_MOUNT, CUSTOM_MOUNT),
         f"{DRIVER_MOUNT}/{app.driver.launcher_path.name}",
         "--spec",
         f"{WORK_MOUNT}/run.json",
@@ -126,11 +128,40 @@ def docker_command(app: AppSpec, cluster: LocalCluster, work_dir: Path) -> list[
     return cmd
 
 
+def custom_mount(app: AppSpec) -> list[str]:
+    """Mount a bring-your-own job's artifact directory read-only."""
+    if not app.custom:
+        return []
+    artifact = Path(str(app.custom["artifact"])).resolve()
+    return ["-v", f"{artifact.parent}:{CUSTOM_MOUNT}:ro"]
+
+
+def py_files(app: AppSpec, driver_dir: str, custom_dir: str | None) -> str:
+    """``--py-files``: the driver zip, plus a custom job's artifact so executors can import it."""
+    files = [f"{driver_dir}/{app.driver.zip_path.name}"]
+    if app.custom:
+        artifact = Path(str(app.custom["artifact"]))
+        files.append(f"{custom_dir}/{artifact.name}" if custom_dir else str(artifact.resolve()))
+    return ",".join(files)
+
+
+def custom_spec(app: AppSpec, custom_dir: str | None) -> dict[str, object] | None:
+    if not app.custom:
+        return None
+    artifact = Path(str(app.custom["artifact"]))
+    return {
+        "path": f"{custom_dir}/{artifact.name}" if custom_dir else str(artifact.resolve()),
+        "entrypoint": app.custom["entrypoint"],
+        "validator": app.custom.get("validator"),
+    }
+
+
 def driver_spec(
     app: AppSpec,
     data_root: str = DATA_MOUNT,
     work_root: str = WORK_MOUNT,
     scratch_root: str | None = None,
+    custom_dir: str | None = CUSTOM_MOUNT,
 ) -> dict[str, object]:
     """``run.json`` for the driver; roots are paths as the driver sees them."""
     return {
@@ -150,6 +181,7 @@ def driver_spec(
         "teragen": (
             {**app.teragen, "output": f"{work_root}/{TERAGEN_OUTPUT}"} if app.teragen else None
         ),
+        "custom": custom_spec(app, custom_dir),
     }
 
 

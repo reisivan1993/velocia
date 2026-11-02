@@ -33,9 +33,10 @@ import time
 from functools import partial
 from typing import Any
 
+from . import custom
 from .fs import Fs, join
 from .jobs import GENERATORS, JOBS, VALIDATORS, synthgen
-from .units import Unit, guarded, run_units, tag
+from .units import WARMUP_REP, Unit, guarded, run_units, tag
 
 TIMINGS_FORMAT = "velocia-timings"
 CHECKS_FORMAT = "velocia-checks"
@@ -112,6 +113,95 @@ def _time(spark: Any, spec: dict[str, Any], units: list[Unit], out_path: str) ->
     doc["finished_at"] = time.time()
     doc["spark"] = _spark_info(spark)  # executors have registered by now
     _write_json(out_path, doc)
+
+
+def _time_custom(spark: Any, spec: dict[str, Any], out_path: str) -> None:
+    """Bring-your-own job: one call per pass (warm-up, then each repetition)."""
+    job = spec["custom"]
+    fn = custom.load(job["path"], job["entrypoint"])
+    doc: dict[str, Any] = {
+        "format": TIMINGS_FORMAT,
+        "version": 1,
+        "run_id": spec["run_id"],
+        "mode": spec["mode"],
+        "started_at": time.time(),
+        "finished_at": None,
+        "spark": _spark_info(spark),
+        "units": [],
+    }
+    passes = ([WARMUP_REP] if spec["warmup"] else []) + list(spec["reps"])
+    for rep in passes:
+        doc["units"] += custom.run_job(
+            fn,
+            spark,
+            spec["tables"],
+            spec["scratch_dir"],
+            spec["run_id"],
+            rep,
+            float(spec["timeout_s"]) * max(len(spec["units"]), 1),
+        )
+        _write_json(out_path, doc)
+    doc["finished_at"] = time.time()
+    doc["spark"] = _spark_info(spark)
+    _write_json(out_path, doc)
+
+
+def _check_custom(spark: Any, spec: dict[str, Any], out_path: str) -> None:
+    """Run the job once, untimed, then its validator; no validator means not checked."""
+    job = spec["custom"]
+    fn = custom.load(job["path"], job["entrypoint"])
+    ran = custom.run_job(
+        fn,
+        spark,
+        spec["tables"],
+        spec["scratch_dir"],
+        spec["run_id"],
+        -1,
+        float(spec["timeout_s"]) * max(len(spec["units"]), 1),
+    )
+    failed = {r["unit_id"]: r for r in ran if r["status"] != "ok"}
+    verdicts: dict[str, Any] = {}
+    error = None
+    if job.get("validator") and not failed:
+        try:
+            verdicts = custom.load(job["path"], job["validator"])(
+                spark, spec["tables"], spec["scratch_dir"]
+            )
+        except Exception as exc:
+            error = f"validator: {type(exc).__name__}: {exc}"[:2000]
+        if verdicts and "rows" in verdicts:  # one verdict for the whole job
+            verdicts = {u["id"]: verdicts for u in spec["units"]}
+    results = []
+    for u in spec["units"]:
+        entry: dict[str, Any] = {
+            "unit_id": u["id"],
+            "tag": tag(spec["run_id"], u["id"], -1),
+            "status": "not_checked",
+            "error": "no validator",
+            "rows": None,
+            "checksum": None,
+        }
+        if u["id"] in failed or (failed and custom.OPAQUE_UNIT in failed):
+            ran_unit = failed.get(u["id"]) or failed[custom.OPAQUE_UNIT]
+            entry.update(status=ran_unit["status"], error=ran_unit["error"])
+        elif error:
+            entry.update(status="failed", error=error)
+        elif u["id"] in verdicts:
+            value = dict(verdicts[u["id"]])
+            problem = value.pop("problem", None)
+            entry.update(value, status="invalid" if problem else "ok", error=problem)
+        results.append(entry)
+    _write_json(
+        out_path,
+        {
+            "format": CHECKS_FORMAT,
+            "version": 1,
+            "run_id": spec["run_id"],
+            "float_round_decimals": int(spec.get("float_round_decimals", 4)),
+            "spark": _spark_info(spark),
+            "units": results,
+        },
+    )
 
 
 def checksum(spark: Any, sql: str, decimals: int) -> dict[str, Any]:
@@ -346,6 +436,7 @@ def main(argv: list[str] | None = None) -> None:
     fs = Fs(spark)
     app_id = spark.sparkContext.applicationId
     _register_udfs(spark)
+    custom.install_helper()
     try:
         if spec.get("executor_wait_s"):
             _wait_for_executors(spark, float(spec["executor_wait_s"]))
@@ -358,6 +449,10 @@ def main(argv: list[str] | None = None) -> None:
         os.makedirs(spec["output_dir"], exist_ok=True)
         if spec["task"] == "teragen":
             _teragen(spark, spec, os.path.join(spec["output_dir"], "teragen.json"))
+        elif spec["task"] == "time" and spec.get("custom"):
+            _time_custom(spark, spec, os.path.join(spec["output_dir"], "timings.json"))
+        elif spec["task"] == "check" and spec.get("custom"):
+            _check_custom(spark, spec, os.path.join(spec["output_dir"], "checks.json"))
         elif spec["task"] == "time":
             _time(spark, spec, units, os.path.join(spec["output_dir"], "timings.json"))
         elif spec["task"] == "check":

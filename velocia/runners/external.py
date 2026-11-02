@@ -32,14 +32,17 @@ from velocia.datagen.manifest import DatasetManifest
 from velocia.families.spark.package import DriverPackage
 from velocia.runners.base import AppResult, AppSpec, QuietCheck
 from velocia.runners.local import (
+    CUSTOM_MOUNT,
     DATA_MOUNT,
     DRIVER_MOUNT,
     LABEL,
     WORK_MOUNT,
     app_status,
+    custom_mount,
     driver_spec,
     host_slept_s,
     linux_user,
+    py_files,
     run_process,
 )
 
@@ -195,6 +198,7 @@ class ExternalRunner:
                 prefix += linux_user()
             if app.task == "stage":
                 prefix += ["-v", f"{app.dataset_location.resolve()}:{DATA_MOUNT}:ro"]
+            prefix += custom_mount(app)
             prefix += [*cluster.docker_args, app.image, "/opt/spark/bin/spark-submit"]
             driver_host = name if networked else None
         else:
@@ -208,7 +212,7 @@ class ExternalRunner:
             *cmd,
             *cluster.submit_args,
             "--py-files",
-            f"{driver_dir}/{app.driver.zip_path.name}",
+            py_files(app, driver_dir, CUSTOM_MOUNT if self.in_docker else None),
             f"{driver_dir}/{app.driver.launcher_path.name}",
             "--spec",
             f"{work}/run.json",
@@ -222,6 +226,7 @@ class ExternalRunner:
             data_root=uri(self.cluster.data_uri, app.dataset_id),
             work_root=work,
             scratch_root=scratch,
+            custom_dir=CUSTOM_MOUNT if self.in_docker else None,
         )
         spec["eventlog_fetch"] = {"dir": self.cluster.eventlog_uri, "dest": f"{work}/eventlog"}
         spec["cleanup"] = [scratch]

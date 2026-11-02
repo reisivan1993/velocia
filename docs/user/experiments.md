@@ -69,6 +69,27 @@ checked within a relative tolerance of 1e-6 of the reference engine (PageRank: t
 the first 50 vertices' ranks; KMeans: cost and centers), while the exact parts must match (the
 vertex set; KMeans' iteration count).
 
+Your own Python job:
+
+```yaml
+workload:
+  kind: job
+  suite: custom
+  dataset_id: tpch-sf1-parquet-zstd        # any generated dataset; its tables are passed in
+  units: [count, priorities]               # or `all`: the whole job is one unit, "app"
+  job: {artifact: jobs/my_job.py, entrypoint: "my_job:run", validator: "my_job:validate"}
+```
+
+`artifact` is a `.py` file or a `.zip` of modules, relative to the experiment file. Velocia
+calls `run(spark, tables, scratch)` once per repetition, where `tables` maps table names to
+paths and `scratch` is a directory removed after the run. Inside, `with velocia.unit("count"):`
+tags and times one unit (`import velocia` works inside a run; outside one, the helper does
+nothing). A job that doesn't use the helper is one opaque unit named `app`, timed around the
+call. The optional validator `validate(spark, tables, scratch)` returns, per unit (or once for
+the whole job), `{"rows": ..., "checksum": ..., "problem": None}`, compared with the
+reference engine's; without one, correctness is "not checked". Jar artifacts are not supported
+yet.
+
 Jobs use the DataFrame API, so engines that replace Spark's operators (Comet, Gluten, hardware
 accelerators) are measured on them.
 

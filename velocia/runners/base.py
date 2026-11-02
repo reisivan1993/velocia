@@ -30,6 +30,8 @@ class AppSpec:
     teragen: dict[str, Any] | None = None  # rows, seed, partitions, generator, synth (task teragen)
     dataset_id: str = ""  # where the data sits on a cluster's own storage (external runner)
     stage: dict[str, object] | None = None  # files, tables, checksum (task stage)
+    # Bring-your-own job: artifact (local .py or .zip), entrypoint, validator
+    custom: dict[str, str | None] | None = None
 
 
 @dataclass(frozen=True)
