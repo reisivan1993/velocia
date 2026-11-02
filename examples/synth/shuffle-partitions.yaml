@@ -1,0 +1,16 @@
+# Shuffle partitions: from a few huge partitions to many tiny tasks (adaptive coalescing off).
+name: synth-shuffle-partitions
+workload:
+  kind: sql
+  suite: synth
+  units: [aggregate]
+  synth: {rows: 5000000, keys: 1000000}
+engines: [spark-vanilla, spark-comet]
+reference_engine: spark-vanilla
+cluster: {runner: local, executors: 1, executor_cores: 4, executor_memory: 3g}
+spark_conf:
+  spark.sql.adaptive.coalescePartitions.enabled: false
+  spark.sql.shuffle.partitions: [4, 32, 200, 2000]
+measures: [wall_time, task_cpu_time]
+repetitions: 5
+modes: [cold]

@@ -18,7 +18,7 @@ from velocia.bundle.validate import validate_bundle
 from velocia.collect.redaction import Redactor
 from velocia.config import ConfigError, VelociaConfig, load_model, models
 from velocia.datagen.duckdb_tpc import DatagenError, generate
-from velocia.datagen.tera import generate_spark_suite
+from velocia.datagen.tera import ensure_synth_datasets, generate_spark_suite, register_dataset
 from velocia.doctor import doctor as run_doctor
 from velocia.doctor import engine_check
 from velocia.engines.docker import DockerError, build_image, inspect_image
@@ -180,9 +180,7 @@ def datagen(
             )
     except DatagenError as exc:
         _fail(str(exc))
-    catalog_copy = results_dir / "datasets" / f"{manifest.dataset_id}.json"
-    catalog_copy.parent.mkdir(parents=True, exist_ok=True)
-    catalog_copy.write_text(manifest.model_dump_json(indent=2) + "\n", "utf-8")
+    register_dataset(results_dir, manifest)
 
     typer.echo(f"{'Generated' if created else 'Reusing existing'} dataset {manifest.dataset_id}")
     typer.echo(f"  {manifest.label}, {manifest.files} files, {manifest.bytes:,} bytes")
@@ -220,6 +218,12 @@ def run(
         return
     config = _config()
     out_dir = results_dir or Path(config.results_dir)
+    try:
+        ensure_synth_datasets(
+            spec, Path(config.results_dir), min(os.cpu_count() or 4, 8), typer.echo
+        )
+    except DatagenError as exc:
+        _fail(str(exc))
     try:
         prepared = prepare(experiment, config)
         experiment_id = Orchestrator(prepared, config, out_dir, echo=typer.echo).run(resume)

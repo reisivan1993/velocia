@@ -1,0 +1,14 @@
+# Skewed aggregate: group-by on a key that gets more skewed.
+name: synth-skewed-aggregate
+workload:
+  kind: sql
+  suite: synth
+  units: [aggregate]
+  synth: {rows: 5000000, keys: 100000, key_dist: zipf, files: 8}
+  sweep: {zipf_s: [0, 0.5, 1.0, 1.5]}
+engines: [spark-vanilla, spark-comet]
+reference_engine: spark-vanilla
+cluster: {runner: local, executors: 1, executor_cores: 4, executor_memory: 3g}
+measures: [wall_time, task_cpu_time]
+repetitions: 5
+modes: [cold]

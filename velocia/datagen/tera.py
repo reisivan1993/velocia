@@ -18,7 +18,7 @@ from pathlib import Path
 import duckdb
 
 from velocia import __version__
-from velocia.config.models import DataFormat, LocalCluster, Suite, SynthSpec
+from velocia.config.models import DataFormat, Experiment, LocalCluster, Suite, SynthSpec
 from velocia.datagen.duckdb_tpc import COMPRESSION, DatagenError, content_checksum, load_manifest
 from velocia.datagen.manifest import (
     MANIFEST_FILE,
@@ -205,3 +205,47 @@ def generate_spark_suite(
         shutil.rmtree(result.work_dir, ignore_errors=True)
         shutil.rmtree(staging, ignore_errors=True)
     return manifest, True
+
+
+def register_dataset(results_dir: Path, manifest: DatasetManifest) -> None:
+    """Copy a manifest into ``<results_dir>/datasets/``, where runs look datasets up."""
+    dest = results_dir / "datasets" / f"{manifest.dataset_id}.json"
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(manifest.model_dump_json(indent=2) + "\n", "utf-8")
+
+
+def ensure_synth_datasets(
+    experiment: Experiment,
+    results_dir: Path,
+    cores: int,
+    progress: Callable[[str], None] = lambda _: None,
+) -> int:
+    """Generate the synth dataset of every sweep point that doesn't exist yet; returns how many."""
+    from velocia.experiment.expander import expand_configs
+    from velocia.workloads.synth import synth_spec
+
+    wl = experiment.workload
+    if wl.suite is not Suite.synth or wl.dataset_id:
+        return 0
+    created = 0
+    specs = {
+        synth_dataset_id(s, wl.format): s
+        for s in (synth_spec(wl, point.sweep) for point in expand_configs(experiment))
+    }
+    for ds_id, spec in specs.items():
+        if (results_dir / "datasets" / f"{ds_id}.json").is_file():
+            continue
+        progress(f"Generating synth dataset {ds_id}")
+        manifest, made = generate_spark_suite(
+            Suite.synth,
+            spec.rows,
+            wl.format,
+            results_dir / "data",
+            results_dir / "drivers",
+            cores,
+            progress,
+            synth=spec,
+        )
+        register_dataset(results_dir, manifest)
+        created += int(made)
+    return created

@@ -1,5 +1,10 @@
 # Spec changelog
 
+## 2026-11-02 — synth workloads, part 1 (T34)
+
+- Synth suite units are operators over `fact` and `dim`: `join`, `aggregate`, `exploding_join`, `sort` (SQL). The spec's named workloads (03 §1.3) are experiments pairing a unit with a swept parameter; `examples/synth/` has skewed join (± AQE skew handling), hot key, skewed aggregate, exploding join, spill (`spark.memory.fraction`) and shuffle partitions.
+- Each sweep point of a synth experiment is its own dataset (the spec at that point); `velocia run` generates missing ones before the first cell. Run manifests carry their cell's dataset; the experiment's `dataset_id` is the first point's.
+
 ## 2026-11-02 — synth generator (T33)
 
 - `velocia datagen --suite synth --spec synth.yaml` with the synth spec (`schemas/synth.schema.json`): `seed`, `rows`, `keys` (cardinality), `key_dist` (`uniform`, `zipf`, `hotkey`), `zipf_s`, `hot_fraction`, `payload_columns`, `null_fraction`, `string_length` (mean), `files`. Two tables: `fact` (`id`, `key`, `p0`.. longs, string `s`) and `dim` (`key`, `name`, `grp`). Dataset id `synth-<12 hex of the spec hash>-<format>`; manifest `generator_params` is the whole spec. Nesting depth, column types beyond long/string and multi-byte strings (03 §2) follow with the workloads that need them (T35).

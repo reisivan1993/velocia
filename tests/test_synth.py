@@ -1,5 +1,6 @@
 """Seeded edge-case data (T33): reproducible, and the distributions asked for."""
 
+import json
 import math
 import shutil
 from pathlib import Path
@@ -103,3 +104,50 @@ def test_synth_is_reproducible_and_shaped(tmp_path: Path, monkeypatch: pytest.Mo
     assert abs(hot - (0.3 + 0.7 / 1000)) < 0.01 and abs(nulls - 0.2) < 0.01
     assert 35 < length < 45
     assert len(list((location / "fact").glob("*.parquet"))) == 5
+
+
+SWEEP = """
+name: sweep
+workload:
+  kind: sql
+  suite: synth
+  synth: {rows: 200000, keys: 5000, key_dist: zipf, files: 2}
+  sweep: {zipf_s: [0, 1.2]}
+engines: [spark-vanilla, spark-comet]
+reference_engine: spark-vanilla
+cluster: {runner: local, executors: 1, executor_cores: 2, executor_memory: 2g}
+measures: [wall_time]
+repetitions: 2
+modes: [cold]
+timeout_per_unit: 5m
+"""
+
+
+@pytest.mark.docker
+@pytest.mark.skipif(shutil.which("docker") is None, reason="docker not available")
+def test_synth_sweep_runs_one_cell_per_point(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "exp.yaml").write_text(SWEEP)
+    result = CliRunner().invoke(app, ["run", "exp.yaml"])
+    assert result.exit_code == 0, result.output
+    assert result.output.count("Generating synth dataset synth-") == 2
+
+    results = tmp_path / "velocia-results"
+    report = json.loads(next((results / "reports").iterdir()).joinpath("report.json").read_text())
+    points = sorted({(c["engine"], c["config"]["zipf_s"]) for c in report["cells"]})
+    assert points == [
+        ("spark-comet", "0"),
+        ("spark-comet", "1.2"),
+        ("spark-vanilla", "0"),
+        ("spark-vanilla", "1.2"),
+    ]
+    units = {r["unit_id"] for r in report["results"]}
+    assert {"join", "aggregate", "exploding_join", "sort"} <= units
+    assert {r["correctness"] for r in report["results"]} == {"pass"}
+    # Each sweep point ran on its own dataset.
+    datasets = {
+        json.loads(m.read_text())["dataset_id"] for m in (results / "runs").glob("*/manifest.json")
+    }
+    assert len(datasets) == 2

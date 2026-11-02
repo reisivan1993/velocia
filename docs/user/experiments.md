@@ -45,6 +45,33 @@ the number of words in the input, and the result must match the reference engine
 Jobs use the DataFrame API, so engines that replace Spark's operators (Comet, Gluten, hardware
 accelerators) are measured on them.
 
+## Edge cases: synth sweeps
+
+The `synth` suite generates seeded data and sweeps one property of it, so you see how each
+engine copes as the data gets harder:
+
+```yaml
+workload:
+  kind: sql
+  suite: synth
+  units: [join]
+  synth: {rows: 5000000, keys: 100000, key_dist: zipf, files: 8}
+  sweep: {zipf_s: [0, 0.5, 1.0, 1.5]}
+spark_conf:
+  spark.sql.adaptive.skewJoin.enabled: [true, false]
+```
+
+Every sweep point is its own dataset; `velocia run` generates the missing ones first. Units:
+`join` (fact to dim, sort-merge), `aggregate` (group by key), `exploding_join` (many-to-many
+self-join, fan-out = rows / keys) and `sort` (full sort). Synth fields: `seed`, `rows`, `keys`,
+`key_dist` (`uniform`, `zipf`, `hotkey`), `zipf_s`, `hot_fraction`, `payload_columns`,
+`null_fraction`, `string_length`, `files`; any of them can be swept. Spark settings are swept
+with a list in `spark_conf`. `examples/synth/` has ready experiments: skewed join, hot key,
+skewed aggregate, exploding join, spill and shuffle partitions.
+
+`velocia datagen --suite synth --spec synth.yaml` generates one dataset from a spec file with
+the same fields.
+
 ## Clusters
 
 `runner: local` runs each Spark application in its own Docker container on this machine, in

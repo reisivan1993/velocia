@@ -12,7 +12,7 @@ import json
 import subprocess
 from collections import defaultdict
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -31,15 +31,16 @@ from velocia.config.models import (
     K8sCluster,
     LocalCluster,
     Mode,
+    Suite,
     VelociaConfig,
 )
 from velocia.datagen.duckdb_tpc import dataset_id as make_dataset_id
 from velocia.datagen.manifest import DatasetManifest, results_label
-from velocia.datagen.tera import SPARK_SUITES, spark_dataset_id
+from velocia.datagen.tera import SPARK_SUITES, spark_dataset_id, synth_dataset_id
 from velocia.engines import cluster_checks
 from velocia.engines.docker import inspect_image
 from velocia.engines.registry import Engine, load_engines
-from velocia.experiment.expander import Cell, expand, spark_value, stable_hash
+from velocia.experiment.expander import Cell, expand, expand_configs, spark_value, stable_hash
 from velocia.families.spark.eventlog.reader import EventLogError
 from velocia.families.spark.eventlog.summary import UnitSummary
 from velocia.families.spark.eventlog.summary import summarize as summarize_log
@@ -55,6 +56,7 @@ from velocia.runners.local import LocalRunner, container_memory_mb, keep_awake
 from velocia.stats.summary import ratio_ci, summarize
 from velocia.store.catalog import Catalog, as_json
 from velocia.workloads import Unit, UnknownUnitError, get_workload, select_units
+from velocia.workloads.synth import synth_spec
 
 TOTAL_UNIT = "_total"  # sum over all units of one repetition; only when every unit finished
 APP_OVERHEAD_S = 600.0
@@ -71,10 +73,14 @@ class Prepared:
     spec_hash: str
     engines: dict[str, Engine]
     units: list[Unit]
-    dataset: DatasetManifest
+    dataset: DatasetManifest  # the experiment's dataset (synth: the first sweep point's)
     measures: list[Measure]
     profiles: dict[str, HardwareProfile | None]  # by cluster name
     warnings: list[str]
+    datasets: dict[str, DatasetManifest] = field(default_factory=dict)  # synth: by config_hash
+
+    def dataset_for(self, cell: Cell) -> DatasetManifest:
+        return self.datasets.get(cell.config_hash, self.dataset)
 
 
 def _git_sha() -> str | None:
@@ -174,25 +180,34 @@ def prepare(path: Path, config: VelociaConfig, cluster_gate: bool = True) -> Pre
             )
 
     wl = experiment.workload
-    if wl.dataset_id:
-        ds_id = wl.dataset_id
-    elif wl.scale_factor is not None:
-        ds_id = make_dataset_id(wl.suite, wl.scale_factor, wl.format)
-    elif wl.rows is not None and wl.suite in SPARK_SUITES:
-        ds_id = spark_dataset_id(wl.suite, wl.rows, wl.format)
+    results_dir = Path(config.results_dir)
+    datasets: dict[str, DatasetManifest] = {}
+    if wl.suite is Suite.synth and not wl.dataset_id:
+        for point in expand_configs(experiment):
+            ds_id = synth_dataset_id(synth_spec(wl, point.sweep), wl.format)
+            datasets[point.config_hash] = _load_dataset(
+                results_dir,
+                ds_id,
+                "velocia run generates synth datasets; or: velocia datagen "
+                "--suite synth --spec <spec>",
+            )
+        dataset = next(iter(datasets.values()))
     else:
-        raise RunError("workload needs scale_factor, rows or dataset_id")
-    manifest_path = Path(config.results_dir) / "datasets" / f"{ds_id}.json"
-    if not manifest_path.is_file():
+        if wl.dataset_id:
+            ds_id = wl.dataset_id
+        elif wl.scale_factor is not None:
+            ds_id = make_dataset_id(wl.suite, wl.scale_factor, wl.format)
+        elif wl.rows is not None and wl.suite in SPARK_SUITES:
+            ds_id = spark_dataset_id(wl.suite, wl.rows, wl.format)
+        else:
+            raise RunError("workload needs scale_factor, rows or dataset_id")
         sf = f" --sf {wl.scale_factor:g}" if wl.scale_factor is not None else ""
         sf += f" --rows {wl.rows}" if wl.rows is not None else ""
-        raise RunError(
-            f"dataset {ds_id} not found; generate it first: "
-            f"velocia datagen --suite {wl.suite.value}{sf} --format {wl.format.value}"
+        dataset = _load_dataset(
+            results_dir,
+            ds_id,
+            f"velocia datagen --suite {wl.suite.value}{sf} --format {wl.format.value}",
         )
-    dataset = DatasetManifest.model_validate_json(manifest_path.read_text("utf-8"))
-    if not Path(dataset.location).is_dir():
-        raise RunError(f"dataset {ds_id}: data directory {dataset.location} is missing")
 
     return Prepared(
         experiment=experiment,
@@ -201,6 +216,7 @@ def prepare(path: Path, config: VelociaConfig, cluster_gate: bool = True) -> Pre
         engines={r.name: known[r.name] for r in experiment.engine_refs},
         units=units,
         dataset=dataset,
+        datasets=datasets,
         measures=[available[m] for m in experiment.measures],
         profiles=profiles,
         warnings=[*experiment.warnings(), *warnings],
@@ -208,6 +224,16 @@ def prepare(path: Path, config: VelociaConfig, cluster_gate: bool = True) -> Pre
 
 
 MEMORY_HEADROOM = 0.85  # of Docker's memory; the rest is for the VM and other containers
+
+
+def _load_dataset(results_dir: Path, ds_id: str, how: str) -> DatasetManifest:
+    manifest_path = results_dir / "datasets" / f"{ds_id}.json"
+    if not manifest_path.is_file():
+        raise RunError(f"dataset {ds_id} not found; generate it first: {how}")
+    dataset = DatasetManifest.model_validate_json(manifest_path.read_text("utf-8"))
+    if not Path(dataset.location).is_dir():
+        raise RunError(f"dataset {ds_id}: data directory {dataset.location} is missing")
+    return dataset
 
 
 def memory_warnings(
@@ -289,7 +315,8 @@ class Orchestrator:
         self.results_dir = results_dir
         self.echo = echo
         self.redactor = Redactor(config.redaction.key_patterns)
-        self._staged: set[str] = set()  # external clusters holding the verified dataset
+        # (external cluster, dataset) pairs verified on the cluster's storage
+        self._staged: set[tuple[str, str]] = set()
 
     # --- run ------------------------------------------------------------------------------
 
@@ -357,7 +384,11 @@ class Orchestrator:
         return yaml.safe_dump(self.redactor.redact(data), sort_keys=False)
 
     def _record_dataset(self, catalog: Catalog) -> None:
-        d = self.p.dataset
+        unique = {d.dataset_id: d for d in [self.p.dataset, *self.p.datasets.values()]}
+        for d in unique.values():
+            self._record_one_dataset(catalog, d)
+
+    def _record_one_dataset(self, catalog: Catalog, d: DatasetManifest) -> None:
         catalog.insert(
             "dataset",
             {
@@ -405,7 +436,7 @@ class Orchestrator:
         profile = self.p.profiles[cell.cluster_name]
         if isinstance(runner, ExternalRunner):
             assert isinstance(cell.cluster, ExternalCluster)
-            self._stage(runner, cell.cluster_name, driver, engine.definition.image)
+            self._stage(runner, cell, driver, engine.definition.image)
             hardware = declared_hardware(cell.cluster_name, cell.cluster, profile)
         else:
             hardware = {
@@ -448,6 +479,7 @@ class Orchestrator:
 
         conf = {**engine.definition.spark_conf, **cell.config.spark_conf}
         image = inspect_image(engine.definition.image)
+        dataset = self.p.dataset_for(cell)
         timeout_s = exp.timeout.total_seconds()
         for run_id, task, app_reps, warmup in apps:
             passes = (len(app_reps) + (1 if warmup else 0)) if task == "time" else 1
@@ -461,9 +493,9 @@ class Orchestrator:
                 reps=app_reps,
                 warmup=warmup,
                 units=[{"id": u.id, "sql": u.sql, "job": u.job} for u in self.p.units],
-                dataset_location=Path(self.p.dataset.location),
-                tables=[t.name for t in self.p.dataset.tables],
-                dataset_id=self.p.dataset.dataset_id,
+                dataset_location=Path(dataset.location),
+                tables=[t.name for t in dataset.tables],
+                dataset_id=dataset.dataset_id,
                 timeout_per_unit_s=timeout_s,
                 app_timeout_s=APP_OVERHEAD_S + passes * len(self.p.units) * timeout_s,
                 float_round_decimals=self.config.correctness.float_round_decimals,
@@ -519,13 +551,12 @@ class Orchestrator:
             {"status": "done"},
         )
 
-    def _stage(
-        self, runner: ExternalRunner, cluster_name: str, driver: DriverPackage, image: str
-    ) -> None:
-        """Put the dataset on the cluster's storage and verify it, once per cluster and run."""
-        if cluster_name in self._staged:
+    def _stage(self, runner: ExternalRunner, cell: Cell, driver: DriverPackage, image: str) -> None:
+        """Put the cell's dataset on the cluster's storage and verify it, once per run."""
+        cluster_name = cell.cluster_name
+        dataset = self.p.dataset_for(cell)
+        if (cluster_name, dataset.dataset_id) in self._staged:
             return
-        dataset = self.p.dataset
         self.echo(f"Staging dataset {dataset.dataset_id} on cluster {cluster_name!r}")
         try:
             problems, tail = runner.stage(dataset, driver, image)
@@ -538,7 +569,7 @@ class Orchestrator:
                 + "; ".join(problems)
                 + (f"\n{log}" if log else "")
             )
-        self._staged.add(cluster_name)
+        self._staged.add((cluster_name, dataset.dataset_id))
 
     def _manifest(
         self,
@@ -589,8 +620,8 @@ class Orchestrator:
             },
             "hardware": hardware,
             "hardware_manifest_hash": hw_hash,
-            "dataset_id": self.p.dataset.dataset_id,
-            "dataset_checksum": self.p.dataset.checksum,
+            "dataset_id": self.p.dataset_for(cell).dataset_id,
+            "dataset_checksum": self.p.dataset_for(cell).checksum,
             "units": [u.id for u in self.p.units],
             "driver_sha256": driver.sha256,
             "velocia_version": __version__,
@@ -599,7 +630,7 @@ class Orchestrator:
             "host_slept_s": result.host_slept_s,
             "notes": result.notes,
             "measures": [m.describe() for m in self.p.measures],
-            "label": results_label(self.p.dataset.label),
+            "label": results_label(self.p.dataset_for(cell).label),
         }
 
     def _record_outputs(

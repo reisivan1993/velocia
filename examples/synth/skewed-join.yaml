@@ -1,0 +1,17 @@
+# Skewed join: how each engine copes as the join key gets more skewed (Zipf exponent 0 = uniform),
+# with and without Apache Spark's adaptive skew-join handling.
+name: synth-skewed-join
+workload:
+  kind: sql
+  suite: synth
+  units: [join]
+  synth: {rows: 5000000, keys: 100000, key_dist: zipf, files: 8}
+  sweep: {zipf_s: [0, 0.5, 1.0, 1.5]}
+engines: [spark-vanilla, spark-comet]
+reference_engine: spark-vanilla
+cluster: {runner: local, executors: 1, executor_cores: 4, executor_memory: 3g}
+spark_conf:
+  spark.sql.adaptive.skewJoin.enabled: [true, false]
+measures: [wall_time, task_cpu_time, shuffle_bytes]
+repetitions: 5
+modes: [cold]

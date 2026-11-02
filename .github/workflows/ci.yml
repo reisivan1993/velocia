@@ -55,6 +55,7 @@ jobs:
           tests/test_planted_faults.py
           tests/test_tera.py
           tests/test_text.py
+          tests/test_synth.py
           tests/test_workloads.py
           tests/test_external.py
       - name: Keep reports of failed tests

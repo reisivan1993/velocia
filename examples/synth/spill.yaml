@@ -1,0 +1,15 @@
+# Spill: a full sort with less and less execution memory.
+name: synth-spill
+workload:
+  kind: sql
+  suite: synth
+  units: [sort]
+  synth: {rows: 5000000, string_length: 64}
+engines: [spark-vanilla, spark-comet]
+reference_engine: spark-vanilla
+cluster: {runner: local, executors: 1, executor_cores: 4, executor_memory: 3g}
+spark_conf:
+  spark.memory.fraction: [0.6, 0.3, 0.1]
+measures: [wall_time, spill_bytes]
+repetitions: 5
+modes: [cold]

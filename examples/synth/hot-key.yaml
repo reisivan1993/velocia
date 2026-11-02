@@ -1,0 +1,14 @@
+# Hot key: a growing share of rows on one join key.
+name: synth-hot-key
+workload:
+  kind: sql
+  suite: synth
+  units: [join]
+  synth: {rows: 5000000, keys: 100000, key_dist: hotkey, files: 8}
+  sweep: {hot_fraction: [0.001, 0.01, 0.1, 0.5]}
+engines: [spark-vanilla, spark-comet]
+reference_engine: spark-vanilla
+cluster: {runner: local, executors: 1, executor_cores: 4, executor_memory: 3g}
+measures: [wall_time, task_cpu_time]
+repetitions: 5
+modes: [cold]
