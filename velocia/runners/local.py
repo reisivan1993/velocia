@@ -32,23 +32,27 @@ DATA_MOUNT = "/velocia/data"
 DRIVER_MOUNT = "/velocia/driver"
 WORK_MOUNT = "/velocia/work"
 LOG_TAIL_LINES = 40
+ERROR_LINES = 10
+ERROR_LINE = re.compile(r"^(?!\s)(.*(Exception|Error)\b.*|Caused by: .*)$")
 TERAGEN_OUTPUT = "teragen-data"  # inside the work dir
 
 
 def linux_user() -> list[str]:
     """``docker run`` arguments to write mounted dirs as this user on a Linux host.
 
-    The image has no passwd entry for that uid, so Java's ``user.home`` is "?" (Spark's Ivy
-    setup then fails); point it and HOME at /tmp.
+    The image has no account for that uid: Hadoop's login then fails ("invalid null input:
+    name") and Java's ``user.home`` is "?". A passwd file naming the user fixes both.
     """
-    return [
-        "--user",
-        f"{os.getuid()}:{os.getgid()}",
-        "-e",
-        "HOME=/tmp",
-        "-e",
-        "SPARK_SUBMIT_OPTS=-Duser.home=/tmp",
-    ]
+    uid, gid = os.getuid(), os.getgid()
+    passwd = Path(tempfile.gettempdir()) / f"velocia-passwd-{uid}"
+    entries = (
+        "root:x:0:0:root:/root:/bin/sh\n"
+        "spark:x:185:185:spark:/opt/spark:/bin/sh\n"
+        f"velocia:x:{uid}:{gid}:velocia:/tmp:/bin/sh\n"
+    )
+    if not passwd.is_file() or passwd.read_text("utf-8") != entries:
+        passwd.write_text(entries, "utf-8")
+    return ["--user", f"{uid}:{gid}", "-e", "HOME=/tmp", "-v", f"{passwd}:/etc/passwd:ro"]
 
 
 def _memory_mb(size: str) -> int:
@@ -203,10 +207,14 @@ def run_process(
 ) -> tuple[int, str, bool]:
     """Run ``cmd``, keeping the last lines of its output; ``(exit code, tail, timed out)``.
 
+    The first exception lines are kept too: a long stack trace would push the root cause
+    out of the tail.
+
     After ``timeout_s`` it calls ``on_timeout`` (which should stop whatever the command
     started, such as a container) and kills the command.
     """
     tail: deque[str] = deque(maxlen=LOG_TAIL_LINES)
+    first_errors: list[str] = []
     timed_out = threading.Event()
     proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
@@ -222,13 +230,17 @@ def run_process(
         assert proc.stdout is not None
         for line in proc.stdout:
             tail.append(line.rstrip())
+            if len(first_errors) < ERROR_LINES and ERROR_LINE.search(line):
+                first_errors.append(line.rstrip())
         exit_code = proc.wait()
     finally:
         timer.cancel()
         if proc.poll() is None:
             proc.kill()
             proc.wait()
-    return exit_code, "\n".join(tail), timed_out.is_set()
+    errors = [e for e in first_errors if e not in tail]
+    head = ["first errors:", *errors, "...", "last lines:"] if errors else []
+    return exit_code, "\n".join([*head, *tail]), timed_out.is_set()
 
 
 def app_status(exit_code: int, timed_out: bool) -> AppStatus:

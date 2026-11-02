@@ -446,3 +446,16 @@ def test_memory_warning_and_container_estimate() -> None:
     warnings = memory_warnings(experiment, engines, {"default": cluster}, docker_memory_gib=8)
     assert len(warnings) == 1 and warnings[0].startswith("spark-comet needs about 7.0 GiB")
     assert memory_warnings(experiment, engines, {"default": cluster}, docker_memory_gib=16) == []
+
+
+def test_run_process_keeps_the_root_cause() -> None:
+    from velocia.runners.local import run_process
+
+    script = (
+        "echo 'Exception in thread main: boom'; echo 'Caused by: root'; "
+        'for i in $(seq 60); do echo "    at frame $i"; done; exit 3'
+    )
+    code, log, timed_out = run_process(["sh", "-c", script], 10, lambda: None)
+    assert code == 3 and not timed_out
+    assert log.startswith("first errors:\nException in thread main: boom\nCaused by: root\n")
+    assert log.endswith("    at frame 60")
