@@ -1,5 +1,11 @@
 # Spec changelog
 
+## 2026-11-02 — viewer (T46, T47)
+
+- `velocia ui [--port N] [--host LOOPBACK]`: experiments (with each candidate engine's total ratio and CI), each experiment's report rendered fresh from the catalog (and its JSON), compare of two experiments, and an experiment name's history (total ratio with CI over time). Binds to loopback only; GET only; the catalog is opened read-only and reports are redacted again before display. `--results-dir` (in 04 §1) is dropped: the results directory comes from `velocia.yaml` like every other command.
+- Built on the Python standard library's HTTP server with Jinja templates, not FastAPI + React as planned: no extra runtime dependencies, no JavaScript build toolchain, and nothing to ship in the wheel but templates. The pages reuse the HTML report's charts.
+- The catalog can be opened read-only.
+
 ## 2026-11-02 — Gluten engine (T27)
 
 - Built-in engine `spark-gluten`: Apache Spark 3.5.9 with Apache Gluten 1.7.0 (Velox), from the official binary release (checksum-pinned). Its native libraries are linux/amd64 only.

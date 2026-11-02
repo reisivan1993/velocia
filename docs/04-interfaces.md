@@ -15,7 +15,7 @@ All public interfaces are versioned and change only with a spec update and a cha
 | `velocia workloads list\|show <suite>` | Available workloads and their units |
 | `velocia measures list\|check <file>` | Built-in and custom measures; `check` validates a formula against the input catalog |
 | `velocia hardware probe [--cluster NAME]` | Run the hardware probes and print what the manifest will record |
-| `velocia ui [--results-dir DIR] [--port]` | Localhost viewer |
+| `velocia ui [--port N] [--host LOOPBACK]` | Read-only viewer on localhost (default port 8765): experiments, reports, compare, history; refuses non-loopback addresses; the results directory comes from `velocia.yaml` |
 | `velocia doctor` | Check Docker or Kubernetes access, Spark Operator, disk space |
 
 ## 2. Configuration — `velocia.yaml` (optional)

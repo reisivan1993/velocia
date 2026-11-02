@@ -1,0 +1,15 @@
+<h1>{{ name }}: over time</h1>
+<p class="note">Total wall-time ratio of each candidate engine vs {{ ref }} in every finished run
+of this experiment, with its 95% CI band; ✕ marks a run whose results failed correctness.</p>
+{% for chart, svg in charts %}
+<h2>{{ chart.unit_label }}</h2>
+{{ svg }}
+<div class="table-wrap"><table>
+<thead><tr><th>experiment</th>{% for e in chart.engines if e != ref %}<th>{{ e }}</th>{% endfor %}</tr></thead>
+<tbody>
+{% for p in chart.points %}
+<tr><td class="mono"><a href="/e/{{ p.id|q }}">{{ p.id }}</a></td>
+{% for e in chart.engines if e != ref %}{% set r = p.results[e] %}<td class="{{ 'fail' if r and r.correctness == 'fail' else '' }}">{{ ratio_text(r) if r else "n/a" }}</td>{% endfor %}</tr>
+{% endfor %}
+</tbody></table></div>
+{% endfor %}

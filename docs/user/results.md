@@ -25,6 +25,17 @@ the report adds a "Sweep" section: for each unit and the total, every engine's s
 reference at each value, as a curve with a shaded 95% CI band and as a table. A value where an
 engine's result was wrong shows as ✕ (HTML) or FAILED (Markdown).
 
+## Browsing results
+
+```bash
+velocia ui            # then open http://127.0.0.1:8765/
+```
+
+A read-only viewer on this machine only: every experiment with its headline speedups, each
+experiment's full report, a "compare two runs" page (does a rerun reproduce the first run), and
+the history of an experiment name (its speedup with CI over time). It never listens on other
+addresses and never fetches anything from the internet. Stop it with Ctrl+C.
+
 ## Sharing results: bundles
 
 ```bash

@@ -51,6 +51,8 @@ def _results(root: Path, planted: PlantedSecrets) -> Path:
                     "experiment_id": EXP,
                     "cell_key": engine,
                     "engine": engine,
+                    "mode": "cold",
+                    "config_hash": "cfg",
                     "hardware_manifest_hash": "sha256:hw",
                 },
             )

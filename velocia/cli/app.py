@@ -387,6 +387,31 @@ def bundle(
 
 
 @app.command()
+def ui(
+    port: Annotated[int, typer.Option(help="Port on localhost.")] = 8765,
+    host: Annotated[str, typer.Option(help="Loopback address to bind.")] = "127.0.0.1",
+) -> None:
+    """Browse results in a read-only viewer on this machine (localhost only)."""
+    from velocia.ui.server import UiError, make_server
+
+    config = _config()
+    try:
+        server = make_server(
+            Path(config.results_dir), host, port, Redactor(config.redaction.key_patterns)
+        )
+    except (UiError, OSError) as exc:
+        _fail(str(exc))
+    shown = host if ":" not in host else f"[{host}]"
+    typer.echo(f"Velocia viewer: http://{shown}:{server.server_address[1]}/  (Ctrl+C to stop)")
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        typer.echo("")
+    finally:
+        server.server_close()
+
+
+@app.command()
 def doctor() -> None:
     """Check Docker or Kubernetes access, Spark Operator and disk space."""
     checks = run_doctor(_config())

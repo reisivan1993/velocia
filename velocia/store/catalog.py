@@ -84,18 +84,27 @@ RESULT_COLUMNS = [
 
 
 class Catalog:
-    def __init__(self, results_dir: Path) -> None:
-        results_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(
+        self, results_dir: Path, read_only: bool = False, lock_wait_s: float = LOCK_WAIT_S
+    ) -> None:
+        """``read_only``: never writes (the viewer); the catalog must exist already."""
         self.path = results_dir / "catalog.duckdb"
+        self.read_only = read_only
+        self.lock_wait_s = lock_wait_s
+        if read_only:
+            if not self.path.is_file():
+                raise FileNotFoundError(f"no catalog at {self.path}")
+            return
+        results_dir.mkdir(parents=True, exist_ok=True)
         with self._connection() as con:
             con.execute(SCHEMA)
 
     @contextmanager
     def _connection(self) -> Iterator[duckdb.DuckDBPyConnection]:
-        deadline = time.monotonic() + LOCK_WAIT_S
+        deadline = time.monotonic() + self.lock_wait_s
         while True:
             try:
-                con = duckdb.connect(self.path)
+                con = duckdb.connect(self.path, read_only=self.read_only)
                 break
             except duckdb.IOException as exc:
                 if "lock" not in str(exc).lower() or time.monotonic() > deadline:

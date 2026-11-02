@@ -1,0 +1,15 @@
+<h1>Compare</h1>
+<p><code>{{ a }}</code> (first) and <code>{{ b }}</code> (rerun)</p>
+{% if error %}
+<p class="fail">{{ error }}</p>
+{% if "different hardware" in error %}<p><a href="/compare?a={{ a|q }}&amp;b={{ b|q }}&amp;force=1">Compare anyway</a> (results from different hardware are not comparable as-is)</p>{% endif %}
+{% else %}
+<p><strong>{{ result.inside }}/{{ result.checked }}</strong> medians of the rerun fall inside the
+first run's 95% CI ({{ "%.0f"|format(result.share_inside * 100) }}%; criterion ≥ 90%), and
+{{ result.flips|length }} ratio(s) moved from better to worse than the reference.</p>
+<p class="{{ '' if result.reproduces else 'fail' }}">The rerun {{ "reproduces" if result.reproduces else "does NOT reproduce" }} the first run.</p>
+{% if result.flips %}<h2>Flips</h2><ul>{% for f in result.flips %}<li>{{ f }}</li>{% endfor %}</ul>{% endif %}
+{% if result.outside %}<h2>Medians outside the first run's CI</h2>
+<ul>{% for line in result.outside[:200] %}<li><code>{{ line }}</code></li>{% endfor %}</ul>{% endif %}
+{% if result.unmatched_cells %}<p class="note">{{ result.unmatched_cells }} cells exist in only one experiment.</p>{% endif %}
+{% endif %}

@@ -1,0 +1,27 @@
+<h1>Experiments</h1>
+<p class="note">From <code>{{ results_dir }}</code>. Every ratio is a ratio of medians with its
+95% CI; FAILED means a result differed from the reference engine's.</p>
+{% if experiments %}
+<h2>Compare two runs</h2>
+<form action="/compare" method="get">
+  <label>first<select name="a">{% for e in experiments %}<option value="{{ e.experiment_id }}"{% if loop.index == 2 %} selected{% endif %}>{{ e.experiment_id }}</option>{% endfor %}</select></label>
+  <label>rerun<select name="b">{% for e in experiments %}<option value="{{ e.experiment_id }}">{{ e.experiment_id }}</option>{% endfor %}</select></label>
+  <button type="submit">Compare</button>
+</form>
+<h2>All experiments</h2>
+<div class="table-wrap"><table>
+<thead><tr><th>experiment</th><th>name</th><th>created (UTC)</th><th>status</th><th>total wall time vs reference</th></tr></thead>
+<tbody>
+{% for e in experiments %}
+<tr>
+<td class="mono"><a href="/e/{{ e.experiment_id|q }}">{{ e.experiment_id }}</a></td>
+<td><a href="/history/{{ e.name|q }}">{{ e.name }}</a></td>
+<td>{{ (e.created_at|string)[:16] }}</td>
+<td class="status-{{ e.status }}">{{ e.status }}</td>
+<td>{% for line in headlines.get(e.experiment_id, []) %}<div class="{{ 'fail' if 'FAILED' in line else '' }}">{{ line }}</div>{% else %}<span class="note">—</span>{% endfor %}</td>
+</tr>
+{% endfor %}
+</tbody></table></div>
+{% else %}
+<p>No experiments yet. Run one: <code>velocia run experiment.yaml</code></p>
+{% endif %}
