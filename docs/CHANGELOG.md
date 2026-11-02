@@ -1,5 +1,11 @@
 # Spec changelog
 
+## 2026-11-02 — synth workloads, part 2 (T35)
+
+- Synth `fact` gains `d` (`decimal(38,10)`), `u` (multi-byte UTF-8 words) and `nest` (`struct<a: bigint, arr: array<bigint>>`); spec fields `nest_fanout` (data) and the query parameters `selectivity` and `window_frame`, which are left out of the dataset id. Dataset ids include a generator version (now 2), so data from an older generator is never reused.
+- Units `scan_filter`, `wide_projection`, `nulls`, `decimals`, `strings`, `nested`, `join_auto`, `window`, `udf`. Unit SQL may contain `${field}` (and `${selectivity_ppm}`), filled from the cell's synth spec. The driver registers the Python UDF `velocia_mix`. Pandas UDFs are not covered: the official Apache Spark image has no pyarrow.
+- `examples/synth/` covers every edge case in 03 §1.3.
+
 ## 2026-11-02 — sweep reporting (T36)
 
 - HTML and Markdown reports gain a section per swept setting (any setting that varies between cells): for the first measure, each unit and the total, every candidate engine's ratio with its 95% CI at each value, as a line with a CI band (HTML) and a table (both). A point that failed correctness shows as ✕ / FAILED, never as a ratio. The JSON report is unchanged; the section is derived from its `cells` and `results`.

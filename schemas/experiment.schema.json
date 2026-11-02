@@ -404,6 +404,14 @@
           "title": "Keys",
           "type": "integer"
         },
+        "nest_fanout": {
+          "default": 4,
+          "description": "elements in nest.arr",
+          "maximum": 1000,
+          "minimum": 0,
+          "title": "Nest Fanout",
+          "type": "integer"
+        },
         "null_fraction": {
           "default": 0.0,
           "description": "per payload column",
@@ -430,12 +438,28 @@
           "title": "Seed",
           "type": "integer"
         },
+        "selectivity": {
+          "default": 0.1,
+          "description": "share of rows scan_filter keeps",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Selectivity",
+          "type": "number"
+        },
         "string_length": {
           "default": 16,
           "description": "mean length of column s",
           "maximum": 10000,
           "minimum": 0,
           "title": "String Length",
+          "type": "integer"
+        },
+        "window_frame": {
+          "default": 10,
+          "description": "rows preceding in window",
+          "maximum": 100000,
+          "minimum": 0,
+          "title": "Window Frame",
           "type": "integer"
         },
         "zipf_s": {

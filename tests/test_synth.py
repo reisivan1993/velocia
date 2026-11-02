@@ -151,3 +151,57 @@ def test_synth_sweep_runs_one_cell_per_point(
         json.loads(m.read_text())["dataset_id"] for m in (results / "runs").glob("*/manifest.json")
     }
     assert len(datasets) == 2
+
+
+def test_query_parameters_render_sql_but_share_data() -> None:
+    from velocia.workloads.synth import SQL, render_sql
+
+    a, b = SynthSpec(selectivity=0.01), SynthSpec(selectivity=0.5, window_frame=3)
+    assert synth_dataset_id(a, FMT) == synth_dataset_id(b, FMT)  # same data
+    assert "< 10000" in render_sql(SQL["scan_filter"], a)
+    assert "< 500000" in render_sql(SQL["scan_filter"], b)
+    assert "BETWEEN 3 PRECEDING" in render_sql(SQL["window"], b)
+    assert synth_dataset_id(SynthSpec(nest_fanout=8), FMT) != synth_dataset_id(a, FMT)
+
+
+ALL_UNITS = """
+name: all-units
+workload:
+  kind: sql
+  suite: synth
+  synth: {rows: 100000, keys: 2000, null_fraction: 0.1, files: 3, string_length: 24}
+  sweep: {selectivity: [0.01, 0.5]}
+engines: [spark-vanilla, spark-comet]
+reference_engine: spark-vanilla
+cluster: {runner: local, executors: 1, executor_cores: 2, executor_memory: 2g}
+measures: [wall_time]
+repetitions: 1
+modes: [cold]
+timeout_per_unit: 5m
+"""
+
+
+@pytest.mark.docker
+@pytest.mark.skipif(shutil.which("docker") is None, reason="docker not available")
+def test_every_synth_unit_on_vanilla_and_comet(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "exp.yaml").write_text(ALL_UNITS)
+    result = CliRunner().invoke(app, ["run", "exp.yaml"])
+    assert result.exit_code == 0, result.output
+    # selectivity is a query parameter: both sweep points share one dataset.
+    assert result.output.count("Generating synth dataset synth-") == 1
+    results = tmp_path / "velocia-results"
+    report = json.loads(next((results / "reports").iterdir()).joinpath("report.json").read_text())
+    verdicts = {
+        (r["engine"], r["unit_id"], r["config_hash"]): r["correctness"]
+        for r in report["results"]
+        if r["unit_id"] != "_total"
+    }
+    from velocia.workloads.synth import SQL
+
+    assert {u for _, u, _ in verdicts} == set(SQL)
+    assert {v for v in verdicts.values()} == {"pass"}, {
+        k: v for k, v in verdicts.items() if v != "pass"
+    }

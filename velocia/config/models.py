@@ -190,9 +190,14 @@ class SynthSpec(StrictModel):
     null_fraction: float = Field(0.0, ge=0, le=1, description="per payload column")
     string_length: int = Field(16, ge=0, le=10_000, description="mean length of column s")
     files: int = Field(8, ge=1, le=100_000, description="files per table")
+    nest_fanout: int = Field(4, ge=0, le=1000, description="elements in nest.arr")
+    # Query parameters: they shape the SQL, not the data (no new dataset when swept).
+    selectivity: float = Field(0.1, ge=0, le=1, description="share of rows scan_filter keeps")
+    window_frame: int = Field(10, ge=0, le=100_000, description="rows preceding in window")
 
 
 SYNTH_FIELDS = frozenset(SynthSpec.model_fields)
+SYNTH_QUERY_FIELDS = frozenset({"selectivity", "window_frame"})
 
 
 class Workload(StrictModel):

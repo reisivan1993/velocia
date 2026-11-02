@@ -18,7 +18,14 @@ from pathlib import Path
 import duckdb
 
 from velocia import __version__
-from velocia.config.models import DataFormat, Experiment, LocalCluster, Suite, SynthSpec
+from velocia.config.models import (
+    SYNTH_QUERY_FIELDS,
+    DataFormat,
+    Experiment,
+    LocalCluster,
+    Suite,
+    SynthSpec,
+)
 from velocia.datagen.duckdb_tpc import COMPRESSION, DatagenError, content_checksum, load_manifest
 from velocia.datagen.manifest import (
     MANIFEST_FILE,
@@ -57,9 +64,14 @@ def spark_dataset_id(suite: Suite, rows: int, data_format: DataFormat) -> str:
     return f"{suite.value}-rows{rows}-{data_format.value}"
 
 
+SYNTH_GENERATOR_VERSION = 2  # bump when the generated columns change: old data isn't reused
+
+
 def synth_dataset_id(spec: SynthSpec, data_format: DataFormat) -> str:
-    """Named by a hash of every generator parameter, seed included."""
-    return f"synth-{stable_hash({'synth': spec.model_dump(mode='json')})[:12]}-{data_format.value}"
+    """Named by a hash of the data parameters (seed included) and the generator version."""
+    data = spec.model_dump(mode="json", exclude=set(SYNTH_QUERY_FIELDS))
+    digest = stable_hash({"synth": data, "generator": SYNTH_GENERATOR_VERSION})
+    return f"synth-{digest[:12]}-{data_format.value}"
 
 
 def tera_dataset_id(rows: int, data_format: DataFormat) -> str:

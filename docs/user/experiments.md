@@ -61,13 +61,21 @@ spark_conf:
   spark.sql.adaptive.skewJoin.enabled: [true, false]
 ```
 
-Every sweep point is its own dataset; `velocia run` generates the missing ones first. Units:
-`join` (fact to dim, sort-merge), `aggregate` (group by key), `exploding_join` (many-to-many
-self-join, fan-out = rows / keys) and `sort` (full sort). Synth fields: `seed`, `rows`, `keys`,
-`key_dist` (`uniform`, `zipf`, `hotkey`), `zipf_s`, `hot_fraction`, `payload_columns`,
-`null_fraction`, `string_length`, `files`; any of them can be swept. Spark settings are swept
-with a list in `spark_conf`. `examples/synth/` has ready experiments: skewed join, hot key,
-skewed aggregate, exploding join, spill and shuffle partitions.
+Every sweep point of a data parameter is its own dataset; `velocia run` generates the missing
+ones first. Units: `join` (fact to dim, forced sort-merge), `join_auto` (Spark picks the
+strategy), `aggregate`, `exploding_join` (many-to-many, fan-out = rows / keys), `sort`,
+`scan_filter`, `wide_projection`, `nulls`, `decimals` (`decimal(38, 10)`), `strings`
+(multi-byte UTF-8, LIKE, regexp), `nested` (explode an array), `window` and `udf` (a Python
+UDF in the middle of an aggregation).
+
+Synth fields, any of which can be swept: `seed`, `rows`, `keys`, `key_dist` (`uniform`,
+`zipf`, `hotkey`), `zipf_s`, `hot_fraction`, `payload_columns`, `null_fraction`,
+`string_length`, `files`, `nest_fanout`, and two query parameters that change the SQL but not
+the data (sweeping them reuses one dataset): `selectivity` and `window_frame`. Spark settings
+are swept with a list in `spark_conf`. `examples/synth/` has one experiment per edge case in
+the spec: skewed join, hot key, skewed aggregate, exploding join, spill, shuffle partitions,
+small files, wide rows, nested types, nulls, decimals, strings, selectivity, join strategy,
+window functions and UDF fallback.
 
 `velocia datagen --suite synth --spec synth.yaml` generates one dataset from a spec file with
 the same fields.

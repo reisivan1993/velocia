@@ -56,7 +56,7 @@ from velocia.runners.local import LocalRunner, container_memory_mb, keep_awake
 from velocia.stats.summary import ratio_ci, summarize
 from velocia.store.catalog import Catalog, as_json
 from velocia.workloads import Unit, UnknownUnitError, get_workload, select_units
-from velocia.workloads.synth import synth_spec
+from velocia.workloads.synth import render_sql, synth_spec
 
 TOTAL_UNIT = "_total"  # sum over all units of one repetition; only when every unit finished
 APP_OVERHEAD_S = 600.0
@@ -492,7 +492,7 @@ class Orchestrator:
                 mode=cell.mode.value,
                 reps=app_reps,
                 warmup=warmup,
-                units=[{"id": u.id, "sql": u.sql, "job": u.job} for u in self.p.units],
+                units=self._units(cell),
                 dataset_location=Path(dataset.location),
                 tables=[t.name for t in dataset.tables],
                 dataset_id=dataset.dataset_id,
@@ -550,6 +550,19 @@ class Orchestrator:
             {"experiment_id": experiment_id, "cell_key": cell.cell_key},
             {"status": "done"},
         )
+
+    def _units(self, cell: Cell) -> list[dict[str, str | None]]:
+        """The units as the driver gets them; synth SQL gets the cell's parameters."""
+        wl = self.p.experiment.workload
+        spec = synth_spec(wl, cell.config.sweep) if wl.suite is Suite.synth else None
+        return [
+            {
+                "id": u.id,
+                "sql": render_sql(u.sql, spec) if spec is not None and u.sql else u.sql,
+                "job": u.job,
+            }
+            for u in self.p.units
+        ]
 
     def _stage(self, runner: ExternalRunner, cell: Cell, driver: DriverPackage, image: str) -> None:
         """Put the cell's dataset on the cluster's storage and verify it, once per run."""

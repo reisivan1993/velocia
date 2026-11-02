@@ -320,6 +320,17 @@ def _wait_for_executors(spark: Any, timeout_s: float) -> None:
         time.sleep(1)
 
 
+def velocia_mix(value: Any) -> Any:
+    """The synth suite's Python UDF: deliberately plain Python, so it can't be accelerated."""
+    return None if value is None else value % 1000 + 1
+
+
+def _register_udfs(spark: Any) -> None:
+    from pyspark.sql.types import LongType
+
+    spark.udf.register("velocia_mix", velocia_mix, LongType())
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="velocia-driver")
     parser.add_argument("--spec", required=True, help="path to run.json")
@@ -334,6 +345,7 @@ def main(argv: list[str] | None = None) -> None:
     spark = SparkSession.builder.appName(f"velocia-{spec['run_id']}").getOrCreate()
     fs = Fs(spark)
     app_id = spark.sparkContext.applicationId
+    _register_udfs(spark)
     try:
         if spec.get("executor_wait_s"):
             _wait_for_executors(spark, float(spec["executor_wait_s"]))

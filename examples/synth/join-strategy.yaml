@@ -1,0 +1,16 @@
+# Join strategy: broadcast vs sort-merge as the build side (dim, one row per key) grows.
+name: synth-join-strategy
+workload:
+  kind: sql
+  suite: synth
+  units: [join_auto]
+  synth: {rows: 5000000}
+  sweep: {keys: [10000, 100000, 1000000]}
+engines: [spark-vanilla, spark-comet]
+reference_engine: spark-vanilla
+cluster: {runner: local, executors: 1, executor_cores: 4, executor_memory: 3g}
+spark_conf:
+  spark.sql.autoBroadcastJoinThreshold: [-1, 104857600]  # never broadcast / up to 100 MB
+measures: [wall_time, shuffle_bytes]
+repetitions: 5
+modes: [cold]

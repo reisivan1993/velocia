@@ -177,6 +177,8 @@ VALIDATORS = {
 }
 # --- synth: seeded edge-case data ----------------------------------------------------------
 
+# Two to four bytes per character in UTF-8, and one emoji outside the Basic Multilingual Plane.
+MULTIBYTE_WORDS = ["café", "naïve", "日本語", "데이터", "Ελλάδα", "мир", "שלום", "😀"]
 UNIFORM_BUCKETS = 1_000_000_007  # prime: hash % P / P is a uniform number in [0, 1)
 
 
@@ -235,11 +237,32 @@ def synthgen(spark: Any, spec: dict[str, Any], output: str) -> dict[str, int]:
         value = F.xxhash64(F.lit(seed), F.lit(f"p{i}"), F.col("id"))
         null = _uniform(seed, f"null{i}") < F.lit(float(spec["null_fraction"]))
         payload.append(F.when(null, F.lit(None).cast("long")).otherwise(value).alias(f"p{i}"))
+    words = F.array(*[F.lit(w) for w in MULTIBYTE_WORDS])
+    picks = [
+        F.element_at(
+            words,
+            (F.floor(_uniform(seed, f"u{i}") * len(MULTIBYTE_WORDS)) + 1).cast("int"),
+        )
+        for i in range(3)
+    ]
+    fanout = int(spec["nest_fanout"])
     fact = spark.range(0, rows, 1, files).select(
         F.col("id"),
         synth_key(spec).alias("key"),
         *payload,
         _string(seed, int(spec["string_length"])).alias("s"),
+        (F.xxhash64(F.lit(seed), F.lit("d"), F.col("id")) % 10**12 / 10**4)
+        .cast("decimal(38,10)")
+        .alias("d"),
+        F.concat_ws(" ", *picks).alias("u"),
+        F.struct(
+            (F.col("id") % 1000).alias("a"),
+            F.expr(
+                f"transform(sequence(1, {fanout}), x -> x * (id % 97))"
+                if fanout
+                else "cast(array() as array<bigint>)"
+            ).alias("arr"),
+        ).alias("nest"),
     )
     fact.write.mode("overwrite").parquet(f"{output}/fact")
     dim = spark.range(0, keys, 1, max(1, min(files, keys // 1000 + 1))).select(

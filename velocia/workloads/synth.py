@@ -10,12 +10,29 @@ workloads are experiments that pair a unit with one swept parameter, for example
 - exploding join: ``exploding_join`` sweeping ``keys`` (fan-out = rows / keys)
 - spill: ``sort`` with ``spark.memory.fraction`` as a ``spark_conf`` list
 - shuffle partitions: ``aggregate`` with ``spark.sql.shuffle.partitions`` as a list
+- small files: ``scan_filter`` or ``aggregate`` sweeping ``files``
+- wide rows: ``wide_projection`` (5 of many columns) sweeping ``payload_columns``
+- nested types: ``nested`` (explode) sweeping ``nest_fanout``
+- null-heavy: ``nulls`` sweeping ``null_fraction``
+- decimal precision: ``decimals`` (``decimal(38, 10)`` sums and averages)
+- strings: ``strings`` (multi-byte UTF-8, LIKE, regexp) sweeping ``string_length``
+- scan + filter selectivity: ``scan_filter`` sweeping ``selectivity``
+- join strategy: ``join_auto`` with ``spark.sql.autoBroadcastJoinThreshold`` as a list,
+  sweeping ``keys`` (the build side's size)
+- window functions: ``window`` sweeping ``window_frame`` or ``keys`` (partition size)
+- UDF fallback: ``udf``, a Python UDF in the middle of an aggregation (pandas UDFs need
+  pyarrow, which the official Apache Spark image doesn't ship)
 
-Examples are in ``examples/synth/``. Each sweep point is its own dataset, named by the hash
-of its full spec, so cells at different points never share data by accident.
+``${name}`` in a unit's SQL is replaced with the cell's synth parameter (query parameters such
+as ``selectivity`` change the SQL, not the data).
+
+Examples are in ``examples/synth/``. Each sweep point of a data parameter is its own dataset,
+named by the hash of its data parameters, so cells at different points never share data by
+accident.
 """
 
 from dataclasses import dataclass
+from string import Template
 
 from velocia.config.models import Suite, SynthSpec, Workload, WorkloadKind
 from velocia.datagen.manifest import DatasetManifest
@@ -35,6 +52,38 @@ SQL = {
         "FROM fact a JOIN fact b ON a.key = b.key"
     ),
     "sort": "SELECT * FROM fact ORDER BY s, id",
+    "scan_filter": (
+        "SELECT count(*) AS n, sum(p0 % 1000) AS v FROM fact "
+        "WHERE abs(xxhash64(id) % 1000000) < ${selectivity_ppm}"
+    ),
+    "wide_projection": "SELECT id, key, p0, s, d FROM fact WHERE id % 10 = 0",
+    "nulls": (
+        "SELECT key % 100 AS g, count(*) AS n, count(p0) AS present, sum(p0 % 1000) AS v "
+        "FROM fact GROUP BY key % 100"
+    ),
+    "decimals": (
+        "SELECT key % 100 AS g, sum(d) AS total, avg(d) AS mean, max(d * 3) AS top "
+        "FROM fact GROUP BY key % 100"
+    ),
+    "strings": (
+        "SELECT count(*) AS n, sum(length(u)) AS chars, count_if(s LIKE '%ab%') AS likes, "
+        "count_if(s RLIKE '^[0-9]+[a-f]') AS matches, max(upper(u)) AS top FROM fact"
+    ),
+    "nested": (
+        "SELECT nest.a % 100 AS g, count(*) AS n, sum(x) AS v "
+        "FROM fact LATERAL VIEW explode(nest.arr) t AS x GROUP BY nest.a % 100"
+    ),
+    "join_auto": (
+        "SELECT d.grp, count(*) AS n FROM fact f JOIN dim d ON f.key = d.key GROUP BY d.grp"
+    ),
+    "window": (
+        "SELECT id, key, sum(p0 % 1000) OVER (PARTITION BY key ORDER BY id "
+        "ROWS BETWEEN ${window_frame} PRECEDING AND CURRENT ROW) AS w FROM fact"
+    ),
+    "udf": (
+        "SELECT key % 100 AS g, sum(velocia_mix(p0)) AS v, count(*) AS n "
+        "FROM fact GROUP BY key % 100"
+    ),
 }
 
 
@@ -49,6 +98,13 @@ class SynthWorkload:
 
 
 SYNTH = SynthWorkload()
+
+
+def render_sql(sql: str, spec: SynthSpec) -> str:
+    """Fill ``${name}`` from the spec (plus ``selectivity_ppm``, parts per million)."""
+    values = {k: str(v) for k, v in spec.model_dump(mode="json").items()}
+    values["selectivity_ppm"] = str(round(spec.selectivity * 1_000_000))
+    return Template(sql).substitute(values)
 
 
 def synth_spec(workload: Workload, sweep: dict[str, str]) -> SynthSpec:
