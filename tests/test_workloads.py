@@ -2,6 +2,7 @@ import json
 import math
 import shutil
 import subprocess
+import sys
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -15,6 +16,7 @@ from velocia.cli.app import app
 from velocia.config.models import DataFormat, Suite, WorkloadKind
 from velocia.datagen.duckdb_tpc import generate
 from velocia.engines.registry import get_engine
+from velocia.runners.local import linux_user
 from velocia.workloads import UnknownUnitError, get_workload, select_units
 from velocia.workloads.sql import QUERIES_DIR, TPCH
 from velocia.workloads.sql.generate import tpch_queries
@@ -108,6 +110,7 @@ def test_all_22_queries_on_spark_match_duckdb(tmp_path: Path) -> None:
             "docker",
             "run",
             "--rm",
+            *(linux_user() if sys.platform == "linux" else []),
             "-v",
             f"{data}:/data:ro",
             "-v",

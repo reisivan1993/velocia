@@ -1,18 +1,27 @@
 """Planted faults for Velocia's tests: wraps SparkSession.sql once pyspark is imported.
 
 spark.velocia.test.fault = wrong  -> every query result is cut to one row (wrong results)
-                         = noisy  -> each query first sleeps a random 0-1.5 s (high variation)
+                         = noisy  -> each query first sleeps 1.5 s x its repetition number (high
+                                     variation, independent of how fast the machine is)
                          = slow   -> each query first runs a Spark job far longer than any timeout
                          = unsorted -> DataFrame.orderBy does nothing (unsorted job output)
 """
 
 import importlib.abc
 import importlib.util
-import random
 import sys
 import time
 
 TARGET = "pyspark.sql.session"
+
+
+def _rep(session):
+    """The repetition from Velocia's job group tag velocia:<run>:<unit>:<rep>; 0 if none."""
+    group = session.sparkContext.getLocalProperty("spark.jobGroup.id") or ""
+    try:
+        return max(int(group.rsplit(":", 1)[1]), 0)
+    except (IndexError, ValueError):
+        return 0
 
 
 def _patch(module):
@@ -21,7 +30,7 @@ def _patch(module):
     def sql(self, *args, **kwargs):
         fault = self.conf.get("spark.velocia.test.fault", "")
         if fault == "noisy":
-            time.sleep(random.uniform(0.0, 1.5))
+            time.sleep(1.5 * _rep(self))
         elif fault == "slow":
             self.range(10**13).selectExpr("sum(id * id)").collect()
         df = original(self, *args, **kwargs)
