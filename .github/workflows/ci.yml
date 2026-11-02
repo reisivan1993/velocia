@@ -49,7 +49,8 @@ jobs:
               tests/test_workloads.py tests/test_tera.py
           - group: workloads
             tests: >-
-              tests/test_text.py tests/test_etl.py tests/test_synth.py tests/test_external.py
+              tests/test_text.py tests/test_etl.py tests/test_iterative_jobs.py
+              tests/test_synth.py tests/test_external.py
     name: integration (${{ matrix.group }})
     steps:
       - uses: actions/checkout@v4

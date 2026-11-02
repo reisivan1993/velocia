@@ -1,5 +1,11 @@
 # Spec changelog
 
+## 2026-11-02 — PageRank and KMeans; tolerance checks (T29, T30)
+
+- `velocia datagen --suite graph --rows N` (edges; rows / 10 vertices; targets Zipf 1.0; table `graph(src, dst)`) and `--suite kmeans --rows N` (10 dimensions around 8 centers; table `kmeans(f0..f9)`) instead of 03 §2's `--vertices/--edges` and `--points/--dims` (one `rows` field, as for the other job suites).
+- Workloads `graph` (unit `pagerank`: 10 iterations, DataFrame API) and `kmeans` (unit `kmeans-train`: MLlib KMeans, k = 8, seed 42, called through the JVM API so no numpy is needed in the engine image).
+- `checks.json` units may carry `values` (numbers) and `tolerance` (relative); correctness then also requires every value within the tolerance of the reference's, while rows and checksum stay exact. The catalog's `unit_check` gains `check_values` and `tolerance`. Tolerance is 1e-6 for both jobs.
+
 ## 2026-11-02 — ETL pipeline (T31)
 
 - `velocia datagen --suite etl --rows N` (synth data with 5% nulls, `keys` = rows / 100, at least 1,000; id `etl-rows<N>-<format>`); workload `etl` with units `read`, `clean`, `join`, `aggregate`, `write` (driver jobs `etl_<unit>`). Each step reads the previous step's scratch output and writes its own (03 §1.2: `write` sink); each output's rows and checksum are compared with the reference engine's.

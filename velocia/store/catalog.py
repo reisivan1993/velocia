@@ -44,6 +44,9 @@ ALTER TABLE unit_run ADD COLUMN IF NOT EXISTS summary VARCHAR;
 CREATE TABLE IF NOT EXISTS unit_check (
     run_id VARCHAR, cell_key VARCHAR, unit_id VARCHAR, rows BIGINT, checksum VARCHAR,
     status VARCHAR, error VARCHAR);
+-- Tolerance checks for iterative floating-point jobs (2026-11-02): JSON list of numbers.
+ALTER TABLE unit_check ADD COLUMN IF NOT EXISTS check_values VARCHAR;
+ALTER TABLE unit_check ADD COLUMN IF NOT EXISTS tolerance DOUBLE;
 CREATE TABLE IF NOT EXISTS measure_value (
     run_id VARCHAR, unit_id VARCHAR, rep INTEGER, measure VARCHAR, value DOUBLE,
     null_reason VARCHAR);

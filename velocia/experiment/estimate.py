@@ -17,7 +17,13 @@ MIN_UNIT_S = 1.0
 # TPC-H: vanilla Apache Spark 3.5 at SF1 took ~0.9 s per query on 4 cores (2026-10-21 demo);
 # rounded up because accelerators are faster and larger clusters scale imperfectly.
 CORE_SECONDS_PER_UNIT_PER_SF = {Suite.tpch: 5.0, Suite.tpcds: 5.0}
-CORE_SECONDS_PER_MILLION_ROWS = {Suite.tera: 6.0, Suite.text: 4.0, Suite.etl: 10.0}
+CORE_SECONDS_PER_MILLION_ROWS = {
+    Suite.tera: 6.0,
+    Suite.text: 4.0,
+    Suite.etl: 10.0,
+    Suite.graph: 30.0,
+    Suite.kmeans: 20.0,
+}
 
 
 @dataclass(frozen=True)

@@ -707,6 +707,12 @@ class Orchestrator:
                         "error": by_id.get(unit["id"], {}).get(
                             "error", f"application {result.status}"
                         ),
+                        "check_values": (
+                            as_json(by_id[unit["id"]]["values"])
+                            if by_id.get(unit["id"], {}).get("values") is not None
+                            else None
+                        ),
+                        "tolerance": by_id.get(unit["id"], {}).get("tolerance"),
                     }
                     for unit in app.units
                 ],
@@ -757,7 +763,23 @@ def _correctness(
     if mine is None or ref is None or mine["status"] != "ok" or ref["status"] != "ok":
         return "not_checked"  # missing, timed out, or no usable reference
     same = mine["rows"] == ref["rows"] and mine["checksum"] == ref["checksum"]
+    if same and (mine.get("check_values") or ref.get("check_values")):
+        same = within_tolerance(
+            json.loads(mine.get("check_values") or "[]"),
+            json.loads(ref.get("check_values") or "[]"),
+            max(mine.get("tolerance") or 0.0, ref.get("tolerance") or 0.0),
+        )
     return "pass" if same else "fail"
+
+
+def within_tolerance(mine: list[float], ref: list[float], tolerance: float) -> bool:
+    """Iterative floating-point results (PageRank, KMeans): every value within a relative
+    ``tolerance`` of the reference's (absolute near zero); the exact parts are the checksum."""
+    if len(mine) != len(ref):
+        return False
+    return all(
+        abs(a - b) <= tolerance * max(abs(a), abs(b), 1.0) for a, b in zip(mine, ref, strict=True)
+    )
 
 
 def compute_results(

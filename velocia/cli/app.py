@@ -63,6 +63,8 @@ class Suite(StrEnum):
     tera = "tera"
     text = "text"
     etl = "etl"
+    graph = "graph"
+    kmeans = "kmeans"
     synth = "synth"
 
 
@@ -121,7 +123,8 @@ def datagen(
     suite: Annotated[Suite, typer.Option(help="Dataset suite.")],
     sf: Annotated[float | None, typer.Option(help="Scale factor (tpch, tpcds).")] = None,
     rows: Annotated[
-        int | None, typer.Option(help="Row count (tera, etl), line count (text).")
+        int | None,
+        typer.Option(help="Rows: records, lines (text), edges (graph), points (kmeans)."),
     ] = None,
     data_format: Annotated[
         DataFormat, typer.Option("--format", help="File format.")
@@ -155,7 +158,7 @@ def datagen(
                 progress=typer.echo,
                 synth=synth,
             )
-        elif suite in (Suite.tera, Suite.text, Suite.etl):
+        elif suite in (Suite.tera, Suite.text, Suite.etl, Suite.graph, Suite.kmeans):
             if rows is None:
                 _fail(f"--rows is required for --suite {suite.value}")
             if sf is not None:

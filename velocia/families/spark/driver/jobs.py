@@ -331,7 +331,155 @@ def validate_output(spark: Any, tables: dict[str, str], output: str) -> dict[str
     return {"rows": rows, "checksum": checksum, "problem": None if rows else "empty output"}
 
 
-GENERATORS = {"tera": teragen, "text": textgen}
+# --- graph: PageRank -------------------------------------------------------------------------
+
+EDGES_PER_VERTEX = 10
+PAGERANK_ITERATIONS = 10
+DAMPING = 0.85
+ITERATIVE_TOLERANCE = 1e-6  # relative; engines sum floats in different orders
+RANKS_CHECKED = 50
+
+
+def graphgen(spark: Any, rows: int, seed: int, partitions: int, output: str) -> int:
+    """``rows`` directed edges over rows / 10 vertices; targets follow a power law (Zipf 1.0),
+    so a few vertices are very popular, like links on the web."""
+    from pyspark.sql import functions as F
+
+    vertices = max(rows // EDGES_PER_VERTEX, 2)
+    spec = {"keys": vertices, "seed": seed, "key_dist": "zipf", "zipf_s": 1.0}
+    spark.range(0, rows, 1, partitions).select(
+        F.floor(_uniform(seed, "src") * vertices).cast("long").alias("src"),
+        synth_key(spec).alias("dst"),
+    ).write.mode("overwrite").parquet(output)
+    return rows
+
+
+def pagerank(spark: Any, tables: dict[str, str], output: str) -> None:
+    """The timed unit: 10 PageRank iterations with the DataFrame API, ranks written out."""
+    from pyspark.sql import functions as F
+
+    edges = spark.read.parquet(tables["graph"])
+    out_degree = edges.groupBy("src").agg(F.count(F.lit(1)).alias("degree"))
+    links = edges.join(out_degree, "src")
+    vertices = (
+        edges.select(F.col("src").alias("id"))
+        .union(edges.select(F.col("dst").alias("id")))
+        .distinct()
+        .localCheckpoint()
+    )
+    ranks = vertices.withColumn("rank", F.lit(1.0))
+    for _ in range(PAGERANK_ITERATIONS):
+        contributions = (
+            links.join(ranks, links.src == ranks.id)
+            .groupBy("dst")
+            .agg(F.sum(F.col("rank") / F.col("degree")).alias("incoming"))
+        )
+        ranks = (
+            vertices.join(contributions, vertices.id == contributions.dst, "left")
+            .select(
+                "id",
+                (
+                    F.lit(1 - DAMPING) + F.lit(DAMPING) * F.coalesce(F.col("incoming"), F.lit(0.0))
+                ).alias("rank"),
+            )
+            .localCheckpoint()  # keeps the plan from growing with every iteration
+        )
+    ranks.write.mode("overwrite").parquet(output)
+
+
+def validate_pagerank(spark: Any, tables: dict[str, str], output: str) -> dict[str, Any]:
+    """Exact: the vertex set. Within a tolerance: total rank and the first 50 vertices' ranks."""
+    from pyspark.sql import functions as F
+
+    ranks = spark.read.parquet(output)
+    rows, checksum = _digest(ranks, ("id",))
+    total = ranks.agg(F.sum("rank")).first()[0]
+    first = [r["rank"] for r in ranks.orderBy("id").limit(RANKS_CHECKED).collect()]
+    problem = None if rows else "no ranks"
+    if rows and any(r is None or r <= 0 for r in first):
+        problem = "ranks must be positive"
+    return {
+        "rows": rows,
+        "checksum": checksum,
+        "values": [float(total or 0.0), *[float(r or 0.0) for r in first]],
+        "tolerance": ITERATIVE_TOLERANCE,
+        "problem": problem,
+    }
+
+
+# --- kmeans: MLlib KMeans ----------------------------------------------------------------------
+
+KMEANS_DIMS = 10
+KMEANS_TRUE_CENTERS = 8
+KMEANS_K = 8
+KMEANS_MAX_ITER = 20
+
+
+def kmeansgen(spark: Any, rows: int, seed: int, partitions: int, output: str) -> int:
+    """``rows`` points in 10 dimensions around 8 seeded centers (spread +/- 5 per dimension)."""
+    from pyspark.sql import functions as F
+
+    center = F.floor(_uniform(seed, "center") * KMEANS_TRUE_CENTERS)
+    columns = []
+    for d in range(KMEANS_DIMS):
+        base = (F.xxhash64(F.lit(seed), F.lit(f"c{d}"), center) % 100).cast("double")
+        noise = (_uniform(seed, f"n{d}a") + _uniform(seed, f"n{d}b") - 1.0) * 5.0
+        columns.append((base + noise).alias(f"f{d}"))
+    spark.range(0, rows, 1, partitions).select(*columns).write.mode("overwrite").parquet(output)
+    return rows
+
+
+def kmeans_train(spark: Any, tables: dict[str, str], output: str) -> None:
+    """The timed unit: MLlib KMeans (k-means||, seed 42) through the JVM API.
+
+    Calling MLlib on the JVM keeps the job free of numpy, which the official Apache Spark image
+    doesn't ship and vendors' images may not either.
+    """
+    jvm = spark.sparkContext._jvm
+    gateway = spark.sparkContext._gateway
+    names = gateway.new_array(jvm.java.lang.String, KMEANS_DIMS)
+    for d in range(KMEANS_DIMS):
+        names[d] = f"f{d}"
+    assembler = (
+        jvm.org.apache.spark.ml.feature.VectorAssembler()
+        .setInputCols(names)
+        .setOutputCol("features")
+    )
+    points = assembler.transform(spark.read.parquet(tables["kmeans"])._jdf)
+    model = (
+        jvm.org.apache.spark.ml.clustering.KMeans()
+        .setK(KMEANS_K)
+        .setSeed(42)
+        .setMaxIter(KMEANS_MAX_ITER)
+        .setFeaturesCol("features")
+        .fit(points)
+    )
+    summary = model.summary()
+    centers = [list(c.toArray()) for c in model.clusterCenters()]
+    rows = [
+        (i, float(summary.trainingCost()), int(summary.numIter()), *center)
+        for i, center in enumerate(sorted(centers))
+    ]
+    columns = ["center", "cost", "iterations", *[f"f{d}" for d in range(KMEANS_DIMS)]]
+    spark.createDataFrame(rows, columns).coalesce(1).write.mode("overwrite").parquet(output)
+
+
+def validate_kmeans(spark: Any, tables: dict[str, str], output: str) -> dict[str, Any]:
+    """Exact: k and the iteration count. Within a tolerance: cost and the sorted centers."""
+    model = spark.read.parquet(output).orderBy("center").collect()
+    values = [float(model[0]["cost"])] if model else []
+    for row in model:
+        values += [float(row[f"f{d}"]) for d in range(KMEANS_DIMS)]
+    return {
+        "rows": len(model),
+        "checksum": f"iterations={model[0]['iterations']}" if model else "",
+        "values": values,
+        "tolerance": ITERATIVE_TOLERANCE,
+        "problem": None if len(model) == KMEANS_K else f"{len(model)} centers, expected {KMEANS_K}",
+    }
+
+
+GENERATORS = {"tera": teragen, "text": textgen, "graph": graphgen, "kmeans": kmeansgen}
 
 
 JOBS = {
@@ -343,10 +491,14 @@ JOBS = {
     "etl_join": etl_join,
     "etl_aggregate": etl_aggregate,
     "etl_write": etl_write,
+    "pagerank": pagerank,
+    "kmeans_train": kmeans_train,
 }
 VALIDATORS = {
     "terasort": validate_terasort,
     "sort": validate_sort,
     "wordcount": validate_wordcount,
     **{f"etl_{step}": validate_output for step in ETL_STEPS},
+    "pagerank": validate_pagerank,
+    "kmeans_train": validate_kmeans,
 }

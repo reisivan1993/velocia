@@ -54,6 +54,21 @@ duplicates and normalizes text, `join` adds the dimension, `aggregate` totals pe
 `write` publishes the result partitioned by group. Each step reads the previous step's output;
 every step's output must match the reference engine's.
 
+PageRank and KMeans:
+
+```yaml
+workload: {kind: job, suite: graph, rows: 10000000}     # rows = edges; unit pagerank
+workload: {kind: job, suite: kmeans, rows: 10000000}    # rows = points; unit kmeans-train
+```
+
+with `velocia datagen --suite graph --rows N` (a seeded power-law graph, rows / 10 vertices)
+and `velocia datagen --suite kmeans --rows N` (points in 10 dimensions around 8 centers).
+`pagerank` runs 10 iterations with the DataFrame API; `kmeans-train` trains MLlib's KMeans
+(k = 8, seed 42). Engines add floating-point numbers in different orders, so these two are
+checked within a relative tolerance of 1e-6 of the reference engine (PageRank: total rank and
+the first 50 vertices' ranks; KMeans: cost and centers), while the exact parts must match (the
+vertex set; KMeans' iteration count).
+
 Jobs use the DataFrame API, so engines that replace Spark's operators (Comet, Gluten, hardware
 accelerators) are measured on them.
 
