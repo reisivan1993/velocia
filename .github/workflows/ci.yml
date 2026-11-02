@@ -50,11 +50,24 @@ jobs:
           uv run velocia engines build spark-comet
       - name: Integration (target < 15 minutes)
         run: >
-          uv run pytest -m docker
+          uv run pytest -m docker --basetemp=${{ runner.temp }}/pytest
           tests/test_e2e_local.py::test_full_pipeline
           tests/test_planted_faults.py
           tests/test_tera.py
           tests/test_workloads.py
+          tests/test_external.py
+      - name: Keep reports of failed tests
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-reports
+          # Generated test data only; never event logs or data from anyone else (CLAUDE.md).
+          path: |
+            ${{ runner.temp }}/pytest/**/report.json
+            ${{ runner.temp }}/pytest/**/report.md
+            ${{ runner.temp }}/pytest/**/driver.log
+            ${{ runner.temp }}/pytest/**/checks.json
+          retention-days: 7
 
   nightly:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'

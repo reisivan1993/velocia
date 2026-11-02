@@ -15,7 +15,6 @@ check needs ``rest_url`` ("quiet check skipped"), and when the event log can't b
 """
 
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -40,6 +39,7 @@ from velocia.runners.local import (
     app_status,
     driver_spec,
     host_slept_s,
+    linux_user,
     run_process,
 )
 
@@ -192,7 +192,7 @@ class ExternalRunner:
                 f"{work_dir.resolve()}:{WORK_MOUNT}",
             ]
             if sys.platform == "linux":  # write the work dir as this user
-                prefix += ["--user", f"{os.getuid()}:{os.getgid()}", "-e", "HOME=/tmp"]
+                prefix += linux_user()
             if app.task == "stage":
                 prefix += ["-v", f"{app.dataset_location.resolve()}:{DATA_MOUNT}:ro"]
             prefix += [*cluster.docker_args, app.image, "/opt/spark/bin/spark-submit"]

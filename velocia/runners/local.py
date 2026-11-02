@@ -35,6 +35,22 @@ LOG_TAIL_LINES = 40
 TERAGEN_OUTPUT = "teragen-data"  # inside the work dir
 
 
+def linux_user() -> list[str]:
+    """``docker run`` arguments to write mounted dirs as this user on a Linux host.
+
+    The image has no passwd entry for that uid, so Java's ``user.home`` is "?" (Spark's Ivy
+    setup then fails); point it and HOME at /tmp.
+    """
+    return [
+        "--user",
+        f"{os.getuid()}:{os.getgid()}",
+        "-e",
+        "HOME=/tmp",
+        "-e",
+        "SPARK_SUBMIT_OPTS=-Duser.home=/tmp",
+    ]
+
+
 def _memory_mb(size: str) -> int:
     if size.isdigit():  # plain bytes
         return int(size) // (1024 * 1024)
@@ -71,7 +87,6 @@ def docker_command(app: AppSpec, cluster: LocalCluster, work_dir: Path) -> list[
         "spark.dynamicAllocation.enabled": "false",
         "spark.ui.enabled": "false",
     }
-    user = ["--user", f"{os.getuid()}:{os.getgid()}", "-e", "HOME=/tmp"]
     cmd = [
         "docker",
         "run",
@@ -82,7 +97,7 @@ def docker_command(app: AppSpec, cluster: LocalCluster, work_dir: Path) -> list[
         f"{LABEL}={app.run_id}",
         "--cpus",
         str(cores),
-        *(user if sys.platform == "linux" else []),
+        *(linux_user() if sys.platform == "linux" else []),
         # Absolute paths: Docker reads a relative one as a named volume.
         "-v",
         f"{app.dataset_location.resolve()}:{DATA_MOUNT}:ro",

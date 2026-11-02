@@ -8,6 +8,7 @@ misbehaves according to spark.velocia.test.fault. The cross-hardware fault is a 
 import json
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -20,6 +21,9 @@ pytestmark = [
     pytest.mark.docker,
     pytest.mark.skipif(shutil.which("docker") is None, reason="docker not available"),
 ]
+
+# The local runner drops the page cache only on a Linux host (D-5).
+COLD = "cold" if sys.platform == "linux" else "cold (cache not dropped)"
 
 IMAGE = "velocia/test-spark-faulty:1"
 FIXTURE = Path(__file__).parent / "fixtures" / "engines" / "spark-faulty"
@@ -63,12 +67,10 @@ def test_planted_faults_are_reported(tmp_path: Path, monkeypatch: pytest.MonkeyP
     # 1. Wrong results: multi-row q1 fails correctness, single-row q6 still matches; the
     #    total fails, and no ratio is shown for failed units anywhere.
     assert rows[("spark-wrong", "q1")]["correctness"] == "fail"
-    assert rows[("spark-wrong", "q6")]["correctness"] == "pass"
+    assert rows[("spark-wrong", "q6")]["correctness"] == "pass", (rows, flags, result.output)
     assert rows[("spark-wrong", "_total")]["correctness"] == "fail"
     assert "correctness FAILED: spark-wrong cold q1" in flags
-    assert (
-        "spark-wrong vs spark-vanilla (cold (cache not dropped)): speedup FAILED" in result.output
-    )
+    assert f"spark-wrong vs spark-vanilla ({COLD}): speedup FAILED" in result.output
     html = (report_dir / "report.html").read_text()
     assert "FAILED (correctness)" in html
 
@@ -108,9 +110,7 @@ def test_unsorted_job_output_fails_validation(
     assert cli.invoke(app, ["datagen", "--suite", "tera", "--rows", "100000"]).exit_code == 0
     result = cli.invoke(app, ["run", "exp.yaml"])
     assert result.exit_code == 0, result.output
-    assert "spark-unsorted vs spark-vanilla (cold (cache not dropped)): speedup FAILED" in (
-        result.output
-    )
+    assert f"spark-unsorted vs spark-vanilla ({COLD}): speedup FAILED" in (result.output)
     results = tmp_path / "velocia-results"
     check = next((results / "runs").glob("*-c002-check"))
     unit = json.loads((check / "checks.json").read_text())["units"][0]

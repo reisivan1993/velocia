@@ -6,7 +6,6 @@ same path in the worker and the submitting container (``file://``), standing in 
 """
 
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -21,6 +20,7 @@ import pytest
 from typer.testing import CliRunner
 
 from velocia.cli.app import app
+from velocia.runners.local import linux_user
 
 pytestmark = [
     pytest.mark.docker,
@@ -64,11 +64,7 @@ def standalone(tmp_path: Path) -> Iterator[Standalone]:
     network, master = f"velocia-ext-{suffix}", f"velocia-ext-master-{suffix}"
     shared = tmp_path / "shared"
     (shared / "eventlog").mkdir(parents=True)
-    user = (
-        ["--user", f"{os.getuid()}:{os.getgid()}", "-e", "HOME=/tmp"]
-        if sys.platform == "linux"
-        else []
-    )
+    user = linux_user() if sys.platform == "linux" else []
     common = ["run", "-d", "--rm", "--label", TEST_LABEL, "--network", network, *user]
     _docker("network", "create", network)
     try:
