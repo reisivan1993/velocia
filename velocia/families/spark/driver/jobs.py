@@ -169,12 +169,6 @@ def validate_wordcount(spark: Any, tables: dict[str, str], output: str) -> dict[
     return result
 
 
-JOBS = {"terasort": terasort, "sort": sort_text, "wordcount": wordcount}
-VALIDATORS = {
-    "terasort": validate_terasort,
-    "sort": validate_sort,
-    "wordcount": validate_wordcount,
-}
 # --- synth: seeded edge-case data ----------------------------------------------------------
 
 # Two to four bytes per character in UTF-8, and one emoji outside the Basic Multilingual Plane.
@@ -274,4 +268,85 @@ def synthgen(spark: Any, spec: dict[str, Any], output: str) -> dict[str, int]:
     return {"fact": rows, "dim": keys}
 
 
+# --- etl: a five-step pipeline, one unit per step ---------------------------------------------
+# Each step reads the previous step's output from the scratch directory, so the units run in
+# order within a repetition (the driver always runs units in workload order).
+
+ETL_STEPS = ["read", "clean", "join", "aggregate", "write"]
+
+
+def _previous(output: str, step: str) -> str:
+    return join(output.rsplit("/", 1)[0], ETL_STEPS[ETL_STEPS.index(step) - 1])
+
+
+def etl_read(spark: Any, tables: dict[str, str], output: str) -> None:
+    """Land the raw events: project and type the columns the pipeline uses."""
+    from pyspark.sql import functions as F
+
+    spark.read.parquet(tables["fact"]).select(
+        "id", "key", "p0", "p1", F.col("d").alias("amount"), F.col("u").alias("label")
+    ).write.mode("overwrite").parquet(output)
+
+
+def etl_clean(spark: Any, tables: dict[str, str], output: str) -> None:
+    """Drop incomplete rows and duplicate ids, normalize text."""
+    from pyspark.sql import functions as F
+
+    raw = spark.read.parquet(_previous(output, "clean"))
+    raw.where(F.col("p0").isNotNull() & F.col("p1").isNotNull()).dropDuplicates(["id"]).select(
+        "id", "key", "p0", "p1", "amount", F.lower(F.trim(F.col("label"))).alias("label")
+    ).write.mode("overwrite").parquet(output)
+
+
+def etl_join(spark: Any, tables: dict[str, str], output: str) -> None:
+    """Enrich events with their dimension row."""
+    clean = spark.read.parquet(_previous(output, "join"))
+    dim = spark.read.parquet(tables["dim"])
+    clean.join(dim, "key").write.mode("overwrite").parquet(output)
+
+
+def etl_aggregate(spark: Any, tables: dict[str, str], output: str) -> None:
+    """Totals per group and name."""
+    from pyspark.sql import functions as F
+
+    spark.read.parquet(_previous(output, "aggregate")).groupBy("grp", "name").agg(
+        F.count(F.lit(1)).alias("events"),
+        F.sum("amount").alias("amount"),
+        F.sum(F.col("p0") % 1000).alias("score"),
+        F.countDistinct("label").alias("labels"),
+    ).write.mode("overwrite").parquet(output)
+
+
+def etl_write(spark: Any, tables: dict[str, str], output: str) -> None:
+    """Publish the result partitioned by group, as a downstream table would be."""
+    spark.read.parquet(_previous(output, "write")).write.mode("overwrite").partitionBy(
+        "grp"
+    ).parquet(output)
+
+
+def validate_output(spark: Any, tables: dict[str, str], output: str) -> dict[str, Any]:
+    """Rows and checksum of a step's output, compared with the reference engine."""
+    df = spark.read.parquet(output)
+    rows, checksum = _digest(df, tuple(sorted(df.columns)))
+    return {"rows": rows, "checksum": checksum, "problem": None if rows else "empty output"}
+
+
 GENERATORS = {"tera": teragen, "text": textgen}
+
+
+JOBS = {
+    "terasort": terasort,
+    "sort": sort_text,
+    "wordcount": wordcount,
+    "etl_read": etl_read,
+    "etl_clean": etl_clean,
+    "etl_join": etl_join,
+    "etl_aggregate": etl_aggregate,
+    "etl_write": etl_write,
+}
+VALIDATORS = {
+    "terasort": validate_terasort,
+    "sort": validate_sort,
+    "wordcount": validate_wordcount,
+    **{f"etl_{step}": validate_output for step in ETL_STEPS},
+}

@@ -62,6 +62,7 @@ class Suite(StrEnum):
     tpcds = "tpcds"
     tera = "tera"
     text = "text"
+    etl = "etl"
     synth = "synth"
 
 
@@ -119,7 +120,9 @@ def _root(
 def datagen(
     suite: Annotated[Suite, typer.Option(help="Dataset suite.")],
     sf: Annotated[float | None, typer.Option(help="Scale factor (tpch, tpcds).")] = None,
-    rows: Annotated[int | None, typer.Option(help="Row count (tera), line count (text).")] = None,
+    rows: Annotated[
+        int | None, typer.Option(help="Row count (tera, etl), line count (text).")
+    ] = None,
     data_format: Annotated[
         DataFormat, typer.Option("--format", help="File format.")
     ] = DataFormat.parquet_zstd,
@@ -152,7 +155,7 @@ def datagen(
                 progress=typer.echo,
                 synth=synth,
             )
-        elif suite in (Suite.tera, Suite.text):
+        elif suite in (Suite.tera, Suite.text, Suite.etl):
             if rows is None:
                 _fail(f"--rows is required for --suite {suite.value}")
             if sf is not None:

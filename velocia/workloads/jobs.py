@@ -13,12 +13,19 @@ class JobWorkload:
     label: str
     jobs: tuple[str, ...]
     kind: WorkloadKind = WorkloadKind.job
+    job_prefix: str = ""  # unit "clean" runs driver job "etl_clean"
 
     def units(self, dataset: DatasetManifest | None = None) -> list[Unit]:
-        return [Unit(id=job, kind=self.kind, job=job) for job in self.jobs]
+        return [Unit(id=job, kind=self.kind, job=self.job_prefix + job) for job in self.jobs]
 
 
 TERA = JobWorkload(Suite.tera, "TeraSort-style sort (DataFrame API)", ("terasort",))
 TEXT = JobWorkload(
     Suite.text, "Sort and WordCount on generated text (DataFrame API)", ("sort", "wordcount")
+)
+ETL = JobWorkload(
+    Suite.etl,
+    "ETL pipeline on generated data (read, clean, join, aggregate, write)",
+    ("read", "clean", "join", "aggregate", "write"),
+    job_prefix="etl_",
 )

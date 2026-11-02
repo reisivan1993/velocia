@@ -42,6 +42,18 @@ sorts the lines and writes them; its validator checks the order and that the out
 same rows as the input. `wordcount` writes `(word, count)` pairs; the counts must add up to
 the number of words in the input, and the result must match the reference engine.
 
+An ETL pipeline in five steps, each its own timed unit:
+
+```yaml
+workload: {kind: job, suite: etl, rows: 10000000}
+```
+
+with data from `velocia datagen --suite etl --rows 10000000` (generated events with 5% nulls
+and a dimension table). `read` lands the raw events, `clean` drops incomplete rows and
+duplicates and normalizes text, `join` adds the dimension, `aggregate` totals per group, and
+`write` publishes the result partitioned by group. Each step reads the previous step's output;
+every step's output must match the reference engine's.
+
 Jobs use the DataFrame API, so engines that replace Spark's operators (Comet, Gluten, hardware
 accelerators) are measured on them.
 

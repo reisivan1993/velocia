@@ -33,11 +33,24 @@ jobs:
       - run: uv run pytest -m "not docker and not slow"
 
   integration:
-    # PR integration test: TPC-H-derived SF0.01 and a small TeraSort on Docker, full pipeline to
-    # the HTML report with one custom YAML measure, plus the planted faults.
+    # PR integration tests on Docker, split into two parallel groups to keep each under ~25
+    # minutes: the TPC-H pipeline to the HTML report, planted faults and the 22-query check;
+    # then the job workloads, synth sweeps and the external runner.
     needs: checks
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: pipeline
+            tests: >-
+              tests/test_e2e_local.py::test_full_pipeline tests/test_planted_faults.py
+              tests/test_workloads.py tests/test_tera.py
+          - group: workloads
+            tests: >-
+              tests/test_text.py tests/test_etl.py tests/test_synth.py tests/test_external.py
+    name: integration (${{ matrix.group }})
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -49,20 +62,12 @@ jobs:
           uv run velocia engines build spark-vanilla
           uv run velocia engines build spark-comet
       - name: Integration
-        run: >
-          uv run pytest -m docker --basetemp=${{ runner.temp }}/pytest
-          tests/test_e2e_local.py::test_full_pipeline
-          tests/test_planted_faults.py
-          tests/test_tera.py
-          tests/test_text.py
-          tests/test_synth.py
-          tests/test_workloads.py
-          tests/test_external.py
+        run: uv run pytest -m docker --basetemp=${{ runner.temp }}/pytest ${{ matrix.tests }}
       - name: Keep reports of failed tests
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: integration-reports
+          name: integration-reports-${{ matrix.group }}
           # Generated test data only; never event logs or data from anyone else (CLAUDE.md).
           path: |
             ${{ runner.temp }}/pytest/**/report.json

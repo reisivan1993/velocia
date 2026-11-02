@@ -1,5 +1,10 @@
 # Spec changelog
 
+## 2026-11-02 — ETL pipeline (T31)
+
+- `velocia datagen --suite etl --rows N` (synth data with 5% nulls, `keys` = rows / 100, at least 1,000; id `etl-rows<N>-<format>`); workload `etl` with units `read`, `clean`, `join`, `aggregate`, `write` (driver jobs `etl_<unit>`). Each step reads the previous step's scratch output and writes its own (03 §1.2: `write` sink); each output's rows and checksum are compared with the reference engine's.
+- CI's Docker integration runs as two parallel groups (pipeline, workloads).
+
 ## 2026-11-02 — synth workloads, part 2 (T35)
 
 - Synth `fact` gains `d` (`decimal(38,10)`), `u` (multi-byte UTF-8 words) and `nest` (`struct<a: bigint, arr: array<bigint>>`); spec fields `nest_fanout` (data) and the query parameters `selectivity` and `window_frame`, which are left out of the dataset id. Dataset ids include a generator version (now 2), so data from an older generator is never reused.

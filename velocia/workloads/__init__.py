@@ -41,11 +41,11 @@ class UnknownUnitError(ValueError):
 
 
 def _builtin() -> dict[Suite, Workload]:
-    from velocia.workloads.jobs import TERA, TEXT
+    from velocia.workloads.jobs import ETL, TERA, TEXT
     from velocia.workloads.sql import TPCH
     from velocia.workloads.synth import SYNTH
 
-    return {TPCH.suite: TPCH, TERA.suite: TERA, TEXT.suite: TEXT, SYNTH.suite: SYNTH}
+    return {w.suite: w for w in (TPCH, TERA, TEXT, ETL, SYNTH)}
 
 
 def load_workloads() -> dict[Suite, Workload]:
