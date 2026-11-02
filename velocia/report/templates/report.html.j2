@@ -163,8 +163,7 @@ SQL plans, how many ran on an accelerator, and row/columnar transitions.</p>
 <h2>Hardware</h2>
 {% for digest, hw in report.hardware_manifests.items() %}
 {% for node in hw.node_types %}
-<p><code>{{ digest[:19] }}</code> · {{ node.count }} x {{ node.host.cpu_model }} ({{ node.host.arch }})
-{% if node.docker %} · Docker: {{ node.docker.cpus }} CPUs, {{ node.docker.memory_gib }} GiB{% endif %}</p>
+<p><code>{{ digest[:19] }}</code> · {{ node | hardware }}</p>
 {% endfor %}
 {% endfor %}
 

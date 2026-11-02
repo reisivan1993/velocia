@@ -86,3 +86,11 @@ Four runs of `examples/acceptance/tpch-sf10.yaml` (TPC-H-derived SF10, vanilla v
 - **Test harness:** a standalone master and worker in Docker on a private network, storage on a shared `file://` mount (MinIO/s3a needs the hadoop-aws jars; left for the nightly T42). Found: a container name with a dot (`sf0.01`) is an invalid Spark driver hostname and executors retried forever; names are now DNS labels, and the driver fails after 5 minutes without executors instead of hanging.
 - **Gate (T43):** `engines check --cluster` needs `--experiment` because clusters are defined in experiment files, not in `velocia.yaml`. Passes are keyed by a hash of the engine definition and the cluster model, so any config change re-gates.
 - **Not done yet:** MinIO nightly (T42), YARN/k8s masters untested, cluster deploy mode.
+
+## 2026-11-02 — first CI on GitHub; T44, T39, T38 leftovers
+
+- **Repo published** (public, github.com/reisivan1993/velocia, at the user's request). The first CI run found that `.gitignore`'s `eventlog/` (meant for benchmark output) had hidden `velocia/families/spark/eventlog/` since T12: a fresh clone was broken while local runs passed. Fixed with a negation rule; checked with a fresh clone.
+- **Linux CI** found: Java's `user.home` is "?" in containers run as the host uid (no passwd entry), breaking Spark's Ivy setup in TeraGen; now `-Duser.home=/tmp`. Tests expected the macOS label "cold (cache not dropped)"; on Linux the cache is dropped. A planted-faults assertion (spark-wrong q6 should still pass) failed on x86 CI only; its message now carries the report so the next run shows why, and failed tests' reports are kept as a CI artifact.
+- **Bundle pairing** picks the lower-middle repetition for even counts, so every pairing row is a real execution with a tag in the event logs.
+- **Plugins:** the network is blocked by patching `socket` inside the plugin call (pure Python plugins can't get around it without native code; that is accepted as a rule, not a sandbox).
+- **Cross-hardware rehearsal:** an integration test runs the CPU-vs-APU shape (vanilla locally, a renamed vanilla on the standalone cluster): refused without `allow_cross_hardware`, then a report with the banner, both manifests, declared accelerators and `accelerator_hours`. With access, T48 is this experiment with the vendor's engine file and master URL.

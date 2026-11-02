@@ -101,3 +101,30 @@ def test_text_is_escaped() -> None:
     html = render_html(report)
     assert "<script>alert" not in html and "<img src=x" not in html
     assert "&lt;script&gt;" in html
+
+
+def test_hardware_line_for_detected_and_declared_nodes() -> None:
+    from velocia.report.build import hardware_line
+
+    local = {
+        "name": "local",
+        "count": 1,
+        "host": {"cpu_model": "Apple M4 Pro", "arch": "arm64"},
+        "docker": {"cpus": 8, "memory_gib": 8},
+        "source": "detected",
+    }
+    assert hardware_line(local) == (
+        "local: 1 x Apple M4 Pro (arm64) · Docker: 8 CPUs, 8 GiB (detected)"
+    )
+    apu = {
+        "name": "apu",
+        "count": 2,
+        "profile": "apu-node",
+        "host": {"cores": 8, "memory_gib": 32.0},
+        "docker": None,
+        "accelerators": {"model": "APU", "count": 1, "source": "declared"},
+        "source": "declared",
+    }
+    assert hardware_line(apu) == (
+        "apu: 2 x profile apu-node · 8 cores, 32.0 GiB per executor · 1 x APU per node (declared)"
+    )

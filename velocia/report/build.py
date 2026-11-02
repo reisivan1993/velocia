@@ -309,13 +309,29 @@ def render_markdown(report: dict[str, Any]) -> str:
     out += ["", "## Hardware", ""]
     for digest, hw in report["hardware_manifests"].items():
         for node in hw["node_types"]:
-            host, docker = node.get("host") or {}, node.get("docker") or {}
-            out.append(
-                f"- `{digest[:19]}`: {node['count']} x {host.get('cpu_model')} "
-                f"({host.get('arch')}), Docker: {docker.get('cpus')} CPUs, "
-                f"{docker.get('memory_gib')} GiB"
-            )
+            out.append(f"- `{digest[:19]}`: {hardware_line(node)}")
     return "\n".join(out).replace("\n\n\n", "\n\n") + "\n"
+
+
+def hardware_line(node: dict[str, Any]) -> str:
+    """One node type in words; probed (detected) and profile-declared nodes alike."""
+    host, docker = node.get("host") or {}, node.get("docker") or {}
+    parts = [f"{node.get('name', 'node')}: {node['count']} x"]
+    if host.get("cpu_model"):
+        parts.append(f"{host['cpu_model']} ({host.get('arch')})")
+    elif node.get("profile"):
+        parts.append(f"profile {node['profile']}")
+    else:
+        parts.append("undeclared nodes")
+    if docker:
+        parts.append(f"· Docker: {docker.get('cpus')} CPUs, {docker.get('memory_gib')} GiB")
+    elif host.get("cores"):
+        parts.append(f"· {host['cores']} cores, {host.get('memory_gib')} GiB per executor")
+    acc = node.get("accelerators")
+    if acc:
+        parts.append(f"· {acc.get('count')} x {acc.get('model') or 'accelerator'} per node")
+    parts.append(f"({node.get('source') or 'detected'})")
+    return " ".join(parts)
 
 
 def write_reports(report: dict[str, Any], results_dir: Path) -> Path:

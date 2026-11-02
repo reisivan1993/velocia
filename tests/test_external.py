@@ -260,3 +260,81 @@ def test_external_terasort(
     assert {r["correctness"] for r in report["results"]} == {"pass"}
     scratch = standalone.shared / "data" / "_scratch"
     assert not scratch.exists() or not any(scratch.iterdir())
+
+
+CPU_VS_APU = """
+name: cpu-vs-apu
+workload: {{kind: sql, suite: tpch, scale_factor: 0.01, units: [q1, q6]}}
+clusters:
+  cpu: {{runner: local, executors: 1, executor_cores: 2, executor_memory: 1g}}
+  apu:
+    runner: external
+    master: "{master}"
+    executors: 1
+    executor_cores: 2
+    executor_memory: 1g
+    hardware_profile: apu-node
+    data_uri: "file://{shared}/data"
+    eventlog_uri: "file://{shared}/eventlog"
+    docker_network: {network}
+    docker_args: ["-v", "{host_shared}:{shared}"]
+engines:
+  - {{name: spark-vanilla, cluster: cpu}}
+  - {{name: spark-apu, cluster: apu}}
+reference_engine: spark-vanilla
+{comparison}
+measures: [wall_time, node_hours, accelerator_hours]
+repetitions: 2
+modes: [cold]
+timeout_per_unit: 5m
+"""
+
+
+def test_cross_hardware_cpu_vs_accelerator(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, standalone: Standalone
+) -> None:
+    """The CPU vs APU pilot's shape, with vanilla Spark standing in for the vendor's build."""
+    monkeypatch.chdir(tmp_path)
+    cli = CliRunner()
+    assert cli.invoke(app, ["datagen", "--suite", "tpch", "--sf", "0.01"]).exit_code == 0
+    (tmp_path / "engines").mkdir()
+    (tmp_path / "engines" / "spark-apu.yaml").write_text(
+        f"name: spark-apu\nimage: {IMAGE}\nspark_versions: ['3.5']\nspark_conf: {{}}\n"
+    )
+    (tmp_path / "hardware").mkdir()
+    (tmp_path / "hardware" / "apu-node.yaml").write_text(
+        "name: apu-node\naccelerators_per_node: 1\naccelerator_model: test-apu\n"
+    )
+
+    def write(comparison: str) -> None:
+        (tmp_path / "exp.yaml").write_text(
+            CPU_VS_APU.format(
+                master=standalone.master_url,
+                shared=SHARED,
+                network=standalone.network,
+                host_shared=standalone.shared,
+                comparison=comparison,
+            )
+        )
+
+    write("")
+    check = cli.invoke(
+        app, ["engines", "check", "spark-apu", "--cluster", "apu", "--experiment", "exp.yaml"]
+    )
+    assert check.exit_code == 0, check.output
+    refused = cli.invoke(app, ["run", "exp.yaml"])
+    assert refused.exit_code != 0 and "different hardware" in refused.output
+
+    write("comparison: {allow_cross_hardware: true}")
+    result = cli.invoke(app, ["run", "exp.yaml"])
+    assert result.exit_code == 0, result.output
+    report_dir = next((tmp_path / "velocia-results" / "reports").iterdir())
+    report = json.loads((report_dir / "report.json").read_text())
+    assert report["cross_hardware"] and len(report["hardware_manifests"]) == 2
+    md = (report_dir / "report.md").read_text()
+    assert "Cross-hardware comparison" in md
+    assert "apu: 1 x profile apu-node" in md and "1 x test-apu per node (declared)" in md
+    assert "Cross-hardware" in (report_dir / "report.html").read_text()
+    acc = [r for r in report["results"] if r["measure"] == "accelerator_hours"]
+    assert any(r["engine"] == "spark-apu" and r["median"] for r in acc)
+    assert all(r["correctness"] == "pass" for r in report["results"] if r["engine"] == "spark-apu")

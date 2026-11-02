@@ -15,7 +15,7 @@ from typing import Any
 from jinja2 import Environment, select_autoescape
 from markupsafe import Markup
 
-from velocia.report.build import TOTAL_UNIT, ratio_text, render_markdown
+from velocia.report.build import TOTAL_UNIT, hardware_line, ratio_text, render_markdown
 
 ROW_H = 22
 LABEL_W = 70
@@ -106,6 +106,7 @@ def render_html(report: dict[str, Any]) -> str:
     env = Environment(autoescape=select_autoescape(default=True, default_for_string=True))
     env.filters["num"] = _num
     env.filters["pct"] = _pct
+    env.filters["hardware"] = hardware_line
     env.globals["ratio_text"] = ratio_text
     template = env.from_string(
         (files("velocia.report") / "templates" / "report.html.j2").read_text("utf-8")
