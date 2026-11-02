@@ -1,5 +1,9 @@
 # Spec changelog
 
+## 2026-11-02 — sweep reporting (T36)
+
+- HTML and Markdown reports gain a section per swept setting (any setting that varies between cells): for the first measure, each unit and the total, every candidate engine's ratio with its 95% CI at each value, as a line with a CI band (HTML) and a table (both). A point that failed correctness shows as ✕ / FAILED, never as a ratio. The JSON report is unchanged; the section is derived from its `cells` and `results`.
+
 ## 2026-11-02 — synth workloads, part 1 (T34)
 
 - Synth suite units are operators over `fact` and `dim`: `join`, `aggregate`, `exploding_join`, `sort` (SQL). The spec's named workloads (03 §1.3) are experiments pairing a unit with a swept parameter; `examples/synth/` has skewed join (± AQE skew handling), hot key, skewed aggregate, exploding join, spill (`spark.memory.fraction`) and shuffle partitions.

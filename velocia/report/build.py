@@ -224,6 +224,92 @@ def headline_lines(report: dict[str, Any]) -> list[str]:
     return lines
 
 
+def sweeps(report: dict[str, Any]) -> list[dict[str, Any]]:
+    """Results along every setting that varies between cells, for the first measure.
+
+    One entry per swept setting (``axis``) and per combination of mode, unit and the other
+    varying settings: the axis values in experiment order, and each engine's result row at
+    each value (ratio with CI for candidates). Renderers draw these as curves and tables.
+    """
+    measure = report["measures"][0]
+    cells = report["cells"]
+    values: dict[str, list[str]] = {}
+    for cell in cells:
+        for key, value in cell["config"].items():
+            if value not in values.setdefault(key, []):
+                values[key].append(value)
+    axes = [k for k, v in values.items() if len(v) > 1]
+    rows = {(r["cell_key"], r["unit_id"]): r for r in report["results"] if r["measure"] == measure}
+    units = sorted({u for _, u in rows}, key=lambda u: (u != TOTAL_UNIT, natural_key(u)))
+    engines = list(dict.fromkeys(c["engine"] for c in cells))
+    out = []
+    for axis in axes:
+        groups: dict[tuple[str, tuple[tuple[str, str], ...]], dict[tuple[str, str], str]] = {}
+        for cell in cells:
+            others = tuple((k, v) for k, v in cell["config"].items() if k != axis)
+            group = groups.setdefault((cell["mode_label"], others), {})
+            group[(cell["engine"], cell["config"].get(axis, ""))] = cell["cell_key"]
+        for (mode_label, others), by_point in groups.items():
+            for unit in units:
+                points: list[dict[str, Any]] = [
+                    {
+                        "value": value,
+                        "results": {
+                            engine: rows.get((by_point.get((engine, value), ""), unit))
+                            for engine in engines
+                        },
+                    }
+                    for value in values[axis]
+                ]
+                if not any(r for p in points for r in p["results"].values()):
+                    continue
+                out.append(
+                    {
+                        "axis": axis,
+                        "measure": measure,
+                        "unit": unit,
+                        "unit_label": "total" if unit == TOTAL_UNIT else unit,
+                        "context": ", ".join([mode_label, *(f"{k}={v}" for k, v in others)]),
+                        "engines": engines,
+                        "points": points,
+                    }
+                )
+    return out
+
+
+def _sweep_markdown(report: dict[str, Any]) -> list[str]:
+    ref = report["experiment"]["reference_engine"]
+    out: list[str] = []
+    previous = None
+    for sweep in sweeps(report):
+        axis: str = sweep["axis"]
+        if axis != previous:
+            previous = axis
+            out += ["", f"## Sweep: {axis} ({sweep['measure']})", ""]
+        candidates = [e for e in sweep["engines"] if e != ref]
+        unit = sweep["points"][0]["results"]
+        measure_unit = next((r["measure_unit"] for r in unit.values() if r), "")
+        out += [
+            f"### {sweep['unit_label']} — {sweep['context']}",
+            "",
+            "| "
+            + " | ".join([axis, *(f"{e} median" for e in sweep["engines"])])
+            + "".join(f" | {e} ratio" for e in candidates)
+            + " |",
+            "| --- |" + " ---: |" * len(sweep["engines"]) + " --- |" * len(candidates),
+        ]
+        for point in sweep["points"]:
+            results = point["results"]
+            medians = [
+                _num(results[e]["median"] if results[e] else None, measure_unit)
+                for e in sweep["engines"]
+            ]
+            ratios = [ratio_text(results[e]) if results[e] else "n/a" for e in candidates]
+            out.append("| " + " | ".join([point["value"], *medians, *ratios]) + " |")
+        out.append("")
+    return out
+
+
 def render_markdown(report: dict[str, Any]) -> str:
     exp = report["experiment"]
     ref = exp["reference_engine"]
@@ -243,6 +329,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         out.append("- **Cross-hardware comparison**: cells ran on different hardware manifests.")
     out += ["", "## Summary", ""]
     out += [f"- {line}" for line in headline_lines(report)] or ["- (no candidate engines)"]
+    out += _sweep_markdown(report)
 
     cells = {c["cell_key"]: c for c in report["cells"]}
     results = report["results"]

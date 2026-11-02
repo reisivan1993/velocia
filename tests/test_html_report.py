@@ -128,3 +128,76 @@ def test_hardware_line_for_detected_and_declared_nodes() -> None:
     assert hardware_line(apu) == (
         "apu: 2 x profile apu-node · 8 cores, 32.0 GiB per executor · 1 x APU per node (declared)"
     )
+
+
+def _sweep_report() -> dict[str, Any]:
+    """A 6-point Zipf sweep x 2 engines; the candidate fails correctness at the last point."""
+    points = ["0", "0.3", "0.6", "0.9", "1.2", "1.5"]
+    report = _report(0, ["spark-vanilla", "spark-comet"])
+    cells, results = [], []
+    for e_i, engine in enumerate(["spark-vanilla", "spark-comet"]):
+        for p_i, point in enumerate(points):
+            key = f"{engine}-{point}"
+            cells.append(
+                {
+                    "cell_key": key,
+                    "engine": engine,
+                    "cluster": "default",
+                    "mode": "cold",
+                    "mode_label": "cold",
+                    "config": {"zipf_s": point},
+                    "config_hash": f"h{p_i}",
+                    "status": "done",
+                }
+            )
+            is_ref = e_i == 0
+            failed = not is_ref and point == "1.5"
+            for unit in ("join", "_total"):
+                results.append(
+                    {
+                        "cell_key": key,
+                        "engine": engine,
+                        "mode": "cold",
+                        "config_hash": f"h{p_i}",
+                        "unit_id": unit,
+                        "measure": "wall_time",
+                        "measure_unit": "s",
+                        "direction": "lower",
+                        "n": 5,
+                        "median": 2.0 + p_i if is_ref else 1.0 + p_i / 4,
+                        "p95": None,
+                        "cv": 0.02,
+                        "cv_flag": False,
+                        "ratio": None if is_ref else (2.0 + p_i) / (1.0 + p_i / 4),
+                        "ci_low": None if is_ref else (2.0 + p_i) / (1.0 + p_i / 4) * 0.95,
+                        "ci_high": None if is_ref else (2.0 + p_i) / (1.0 + p_i / 4) * 1.05,
+                        "correctness": "fail" if failed else "pass",
+                        "timeouts": 0,
+                    }
+                )
+    return {**report, "cells": cells, "results": results, "measures": ["wall_time"]}
+
+
+def test_sweep_renders_curves_and_tables_offline() -> None:
+    from velocia.report.build import render_markdown, sweeps
+
+    report = _sweep_report()
+    found = sweeps(report)
+    assert [(s["axis"], s["unit_label"]) for s in found] == [
+        ("zipf_s", "total"),
+        ("zipf_s", "join"),
+    ]
+    assert [p["value"] for p in found[0]["points"]] == ["0", "0.3", "0.6", "0.9", "1.2", "1.5"]
+
+    html = render_html(report)
+    assert html.count('class="chart sweep"') == 2
+    assert html.count('class="line s1"') == 2 and html.count('class="band s1"') == 2
+    assert "<h2>Sweep: zipf_s</h2>" in html
+    assert re.search(r'<(script|link|img)[^>]+(src|href)="https?://', html) is None
+    assert "✕" in html  # the failed point, never a ratio
+
+    md = render_markdown(report)
+    assert "## Sweep: zipf_s (wall_time)" in md
+    assert "| zipf_s | spark-vanilla median | spark-comet median | spark-comet ratio |" in md
+    assert "| 1.5 | 7.000 s | 2.250 s | FAILED (correctness) |" in md
+    assert "| 0 | 2.000 s | 1.000 s | 2.00x [95% CI 1.90-2.10] |" in md

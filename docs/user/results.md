@@ -18,6 +18,13 @@ Everything goes into the results directory (`./velocia-results` by default):
 Formats are versioned (`format` and `version` fields) and documented in
 `docs/04-interfaces.md`.
 
+## Sweeps
+
+When a setting varies between cells (a synth sweep such as `zipf_s`, or a `spark_conf` list),
+the report adds a "Sweep" section: for each unit and the total, every engine's speedup over the
+reference at each value, as a curve with a shaded 95% CI band and as a table. A value where an
+engine's result was wrong shows as ✕ (HTML) or FAILED (Markdown).
+
 ## Sharing results: bundles
 
 ```bash
