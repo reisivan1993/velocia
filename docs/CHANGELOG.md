@@ -1,5 +1,11 @@
 # Spec changelog
 
+## 2026-11-02 — synth generator (T33)
+
+- `velocia datagen --suite synth --spec synth.yaml` with the synth spec (`schemas/synth.schema.json`): `seed`, `rows`, `keys` (cardinality), `key_dist` (`uniform`, `zipf`, `hotkey`), `zipf_s`, `hot_fraction`, `payload_columns`, `null_fraction`, `string_length` (mean), `files`. Two tables: `fact` (`id`, `key`, `p0`.. longs, string `s`) and `dim` (`key`, `name`, `grp`). Dataset id `synth-<12 hex of the spec hash>-<format>`; manifest `generator_params` is the whole spec. Nesting depth, column types beyond long/string and multi-byte strings (03 §2) follow with the workloads that need them (T35).
+- Experiments: `workload.synth` (a synth spec, synth suite only); `workload.sweep` keys must be synth spec fields (Spark settings are swept with lists in `spark_conf`).
+- `run.json`'s `teragen` parameters gain `synth`; every generator writes `<output>/<table>`.
+
 ## 2026-11-02 — Sort and WordCount (T28)
 
 - `velocia datagen --suite text --rows N` (03 §2 said `--bytes N`; `rows` counts lines and reuses the existing `workload.rows` field, so experiment schemas and config hashes don't change). Dataset ids `text-rows<N>-<format>`, table `text` with one `line` column: ten words per line from a 50,000-word vocabulary skewed toward a few common words, seed 42.

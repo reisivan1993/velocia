@@ -16,8 +16,8 @@
 ``time`` writes ``timings.json`` (rewritten after every unit, so a crash keeps what finished);
 ``check`` writes ``checks.json`` with one row count and checksum per unit (untimed, ADR-5);
 job units write into ``scratch_dir`` and their validator's verdict goes into ``checks.json``.
-``teragen`` generates job input data (``generator``: ``tera`` or ``text``) and writes
-``teragen.json``.
+``teragen`` generates job input data (``generator``: ``tera``, ``text`` or ``synth``) into
+``<output>/<table>`` and writes ``teragen.json``.
 ``stage`` copies a dataset to the cluster's storage and verifies it there (``stage.json``).
 
 On clusters Velocia doesn't run (the ``external`` runner) the optional ``eventlog_fetch``
@@ -34,7 +34,7 @@ from functools import partial
 from typing import Any
 
 from .fs import Fs, join
-from .jobs import GENERATORS, JOBS, VALIDATORS
+from .jobs import GENERATORS, JOBS, VALIDATORS, synthgen
 from .units import Unit, guarded, run_units, tag
 
 TIMINGS_FORMAT = "velocia-timings"
@@ -151,12 +151,24 @@ def _check_job(spark: Any, spec: dict[str, Any], unit: Unit) -> dict[str, Any]:
 
 
 def _teragen(spark: Any, spec: dict[str, Any], out_path: str) -> None:
-    """Generate a job dataset (``generator``: tera or text) from a seed."""
+    """Generate a job dataset (``generator``: tera, text or synth) from a seed.
+
+    Each table goes to ``<output>/<table>``.
+    """
     params = spec["teragen"]
-    generate = GENERATORS[params.get("generator", "tera")]
-    rows = generate(
-        spark, int(params["rows"]), int(params["seed"]), int(params["partitions"]), params["output"]
-    )
+    generator = params.get("generator", "tera")
+    if generator == "synth":
+        rows = synthgen(spark, params["synth"], params["output"])
+    else:
+        rows = {
+            generator: GENERATORS[generator](
+                spark,
+                int(params["rows"]),
+                int(params["seed"]),
+                int(params["partitions"]),
+                f"{params['output']}/{generator}",
+            )
+        }
     _write_json(
         out_path,
         {"format": "velocia-teragen", "version": 1, "rows": rows, "spark": _spark_info(spark)},

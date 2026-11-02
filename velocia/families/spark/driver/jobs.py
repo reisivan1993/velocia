@@ -175,4 +175,80 @@ VALIDATORS = {
     "sort": validate_sort,
     "wordcount": validate_wordcount,
 }
+# --- synth: seeded edge-case data ----------------------------------------------------------
+
+UNIFORM_BUCKETS = 1_000_000_007  # prime: hash % P / P is a uniform number in [0, 1)
+
+
+def _uniform(seed: int, tag: str) -> Any:
+    from pyspark.sql import functions as F
+
+    h = F.xxhash64(F.lit(seed), F.lit(tag), F.col("id"))
+    return (F.abs(h % UNIFORM_BUCKETS) / F.lit(float(UNIFORM_BUCKETS))).cast("double")
+
+
+def synth_key(spec: dict[str, Any]) -> Any:
+    """The fact table's key: 0 .. keys-1, uniform, Zipf(s) or with one hot key.
+
+    Zipf ranks come from the inverse CDF of a density proportional to x^-s on
+    [0.5, keys + 0.5), rounded, so rank k has probability close to k^-s / H(keys, s).
+    """
+    from pyspark.sql import functions as F
+
+    keys, seed = int(spec["keys"]), int(spec["seed"])
+    u = _uniform(seed, "key")
+    if spec["key_dist"] == "zipf" and float(spec["zipf_s"]) > 0:
+        s = float(spec["zipf_s"])
+        lo, hi = 0.5, keys + 0.5
+        if abs(s - 1.0) < 1e-9:
+            x = F.lit(lo) * F.pow(F.lit(hi / lo), u)
+        else:
+            a, b = lo ** (1 - s), hi ** (1 - s)
+            x = F.pow(F.lit(a) + u * F.lit(b - a), F.lit(1 / (1 - s)))
+        rank = F.least(F.greatest(F.round(x), F.lit(1.0)), F.lit(float(keys)))
+        return (rank - 1).cast("long")
+    uniform_key = F.floor(u * keys).cast("long")
+    if spec["key_dist"] == "hotkey":
+        hot = _uniform(seed, "hot") < F.lit(float(spec["hot_fraction"]))
+        return F.when(hot, F.lit(0).cast("long")).otherwise(uniform_key)
+    return uniform_key
+
+
+def _string(seed: int, mean_length: int) -> Any:
+    """Hex text of length mean_length/2 .. 3*mean_length/2, seeded per row."""
+    from pyspark.sql import functions as F
+
+    if mean_length == 0:
+        return F.lit("")
+    length = F.floor(_uniform(seed, "len") * mean_length).cast("int") + F.lit(mean_length // 2)
+    digest = F.sha2(F.concat_ws(":", F.lit(seed), F.col("id")), 256)  # 64 hex characters
+    return F.repeat(digest, mean_length // 64 + 2).substr(F.lit(1), length)
+
+
+def synthgen(spark: Any, spec: dict[str, Any], output: str) -> dict[str, int]:
+    """Write ``fact`` and ``dim`` under ``output``; the same spec always gives the same rows."""
+    from pyspark.sql import functions as F
+
+    seed, rows, keys, files = (int(spec[k]) for k in ("seed", "rows", "keys", "files"))
+    payload = []
+    for i in range(int(spec["payload_columns"])):
+        value = F.xxhash64(F.lit(seed), F.lit(f"p{i}"), F.col("id"))
+        null = _uniform(seed, f"null{i}") < F.lit(float(spec["null_fraction"]))
+        payload.append(F.when(null, F.lit(None).cast("long")).otherwise(value).alias(f"p{i}"))
+    fact = spark.range(0, rows, 1, files).select(
+        F.col("id"),
+        synth_key(spec).alias("key"),
+        *payload,
+        _string(seed, int(spec["string_length"])).alias("s"),
+    )
+    fact.write.mode("overwrite").parquet(f"{output}/fact")
+    dim = spark.range(0, keys, 1, max(1, min(files, keys // 1000 + 1))).select(
+        F.col("id").alias("key"),
+        F.concat(F.lit("k"), F.col("id").cast("string")).alias("name"),
+        (F.col("id") % 100).alias("grp"),
+    )
+    dim.write.mode("overwrite").parquet(f"{output}/dim")
+    return {"fact": rows, "dim": keys}
+
+
 GENERATORS = {"tera": teragen, "text": textgen}

@@ -62,6 +62,7 @@ class Suite(StrEnum):
     tpcds = "tpcds"
     tera = "tera"
     text = "text"
+    synth = "synth"
 
 
 class DataFormat(StrEnum):
@@ -122,6 +123,7 @@ def datagen(
     data_format: Annotated[
         DataFormat, typer.Option("--format", help="File format.")
     ] = DataFormat.parquet_zstd,
+    spec: Annotated[Path | None, typer.Option(help="Generator spec (synth).")] = None,
     iceberg: Annotated[bool, typer.Option(help="Write as an Iceberg table.")] = False,
     out: Annotated[Path | None, typer.Option(help="Output directory.")] = None,
 ) -> None:
@@ -131,7 +133,26 @@ def datagen(
     results_dir = Path(_config().results_dir)
     fmt = models.DataFormat(data_format.value)
     try:
-        if suite in (Suite.tera, Suite.text):
+        if suite is Suite.synth:
+            if spec is None:
+                _fail("--spec is required for --suite synth (see schemas/synth.schema.json)")
+            if sf is not None or rows is not None:
+                _fail("--sf and --rows don't apply to --suite synth; set rows in the spec")
+            try:
+                synth = load_model(spec, models.SynthSpec)
+            except ConfigError as exc:
+                _fail(str(exc))
+            manifest, created = generate_spark_suite(
+                models.Suite.synth,
+                synth.rows,
+                fmt,
+                out or results_dir / "data",
+                results_dir / "drivers",
+                cores=min(os.cpu_count() or 4, 8),
+                progress=typer.echo,
+                synth=synth,
+            )
+        elif suite in (Suite.tera, Suite.text):
             if rows is None:
                 _fail(f"--rows is required for --suite {suite.value}")
             if sf is not None:

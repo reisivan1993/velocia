@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from velocia.families.spark.package import DriverPackage
 
@@ -27,7 +27,7 @@ class AppSpec:
     timeout_per_unit_s: float
     app_timeout_s: float
     float_round_decimals: int = 4
-    teragen: dict[str, int | str] | None = None  # rows, seed, partitions (task teragen)
+    teragen: dict[str, Any] | None = None  # rows, seed, partitions, generator, synth (task teragen)
     dataset_id: str = ""  # where the data sits on a cluster's own storage (external runner)
     stage: dict[str, object] | None = None  # files, tables, checksum (task stage)
 

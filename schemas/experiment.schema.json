@@ -288,6 +288,15 @@
       "title": "K8sCluster",
       "type": "object"
     },
+    "KeyDistribution": {
+      "enum": [
+        "uniform",
+        "zipf",
+        "hotkey"
+      ],
+      "title": "KeyDistribution",
+      "type": "string"
+    },
     "LocalCluster": {
       "additionalProperties": false,
       "properties": {
@@ -363,6 +372,83 @@
       ],
       "title": "Suite",
       "type": "string"
+    },
+    "SynthSpec": {
+      "additionalProperties": false,
+      "description": "Seeded edge-case data (docs/03-spec.md \u00a71.3, \u00a72): ``synth.yaml`` or ``workload.synth``.\n\nTwo tables: ``fact`` (``rows`` rows: ``key``, ``payload_columns`` longs ``p0``.., a string\n``s``) and ``dim`` (one row per key). Every field can be swept (``workload.sweep``).",
+      "properties": {
+        "files": {
+          "default": 8,
+          "description": "files per table",
+          "maximum": 100000,
+          "minimum": 1,
+          "title": "Files",
+          "type": "integer"
+        },
+        "hot_fraction": {
+          "default": 0.1,
+          "description": "share of rows on key 0 (key_dist: hotkey)",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Hot Fraction",
+          "type": "number"
+        },
+        "key_dist": {
+          "$ref": "#/$defs/KeyDistribution",
+          "default": "uniform"
+        },
+        "keys": {
+          "default": 100000,
+          "description": "key cardinality; dim has one row per key",
+          "exclusiveMinimum": 0,
+          "title": "Keys",
+          "type": "integer"
+        },
+        "null_fraction": {
+          "default": 0.0,
+          "description": "per payload column",
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Null Fraction",
+          "type": "number"
+        },
+        "payload_columns": {
+          "default": 4,
+          "maximum": 2000,
+          "minimum": 1,
+          "title": "Payload Columns",
+          "type": "integer"
+        },
+        "rows": {
+          "default": 1000000,
+          "exclusiveMinimum": 0,
+          "title": "Rows",
+          "type": "integer"
+        },
+        "seed": {
+          "default": 42,
+          "title": "Seed",
+          "type": "integer"
+        },
+        "string_length": {
+          "default": 16,
+          "description": "mean length of column s",
+          "maximum": 10000,
+          "minimum": 0,
+          "title": "String Length",
+          "type": "integer"
+        },
+        "zipf_s": {
+          "default": 1.0,
+          "description": "Zipf exponent (key_dist: zipf)",
+          "maximum": 3,
+          "minimum": 0,
+          "title": "Zipf S",
+          "type": "number"
+        }
+      },
+      "title": "SynthSpec",
+      "type": "object"
     },
     "Workload": {
       "additionalProperties": false,
@@ -469,6 +555,17 @@
           ],
           "default": null,
           "title": "Sweep"
+        },
+        "synth": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SynthSpec"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "units": {
           "anyOf": [

@@ -165,6 +165,36 @@ class CustomJob(StrictModel):
     validator: str | None = None
 
 
+class KeyDistribution(StrEnum):
+    uniform = "uniform"
+    zipf = "zipf"
+    hotkey = "hotkey"
+
+
+class SynthSpec(StrictModel):
+    """Seeded edge-case data (docs/03-spec.md §1.3, §2): ``synth.yaml`` or ``workload.synth``.
+
+    Two tables: ``fact`` (``rows`` rows: ``key``, ``payload_columns`` longs ``p0``.., a string
+    ``s``) and ``dim`` (one row per key). Every field can be swept (``workload.sweep``).
+    """
+
+    seed: int = 42
+    rows: int = Field(1_000_000, gt=0)
+    keys: int = Field(100_000, gt=0, description="key cardinality; dim has one row per key")
+    key_dist: KeyDistribution = KeyDistribution.uniform
+    zipf_s: float = Field(1.0, ge=0, le=3, description="Zipf exponent (key_dist: zipf)")
+    hot_fraction: float = Field(
+        0.1, ge=0, le=1, description="share of rows on key 0 (key_dist: hotkey)"
+    )
+    payload_columns: int = Field(4, ge=1, le=2000)
+    null_fraction: float = Field(0.0, ge=0, le=1, description="per payload column")
+    string_length: int = Field(16, ge=0, le=10_000, description="mean length of column s")
+    files: int = Field(8, ge=1, le=100_000, description="files per table")
+
+
+SYNTH_FIELDS = frozenset(SynthSpec.model_fields)
+
+
 class Workload(StrictModel):
     kind: WorkloadKind
     suite: Suite
@@ -176,6 +206,7 @@ class Workload(StrictModel):
     sql_dir: str | None = None
     job: CustomJob | None = None
     sweep: dict[str, Annotated[list[ConfScalar], Field(min_length=1)]] | None = None
+    synth: SynthSpec | None = None
 
     @model_validator(mode="after")
     def _check_suite(self) -> Self:
@@ -191,6 +222,15 @@ class Workload(StrictModel):
                 raise FieldError("job", "required for a custom job workload")
         if self.sweep is not None and self.suite is not Suite.synth:
             raise FieldError("sweep", "only valid for the synth suite")
+        if self.synth is not None and self.suite is not Suite.synth:
+            raise FieldError("synth", "only valid for the synth suite")
+        unknown = sorted(set(self.sweep or {}) - SYNTH_FIELDS)
+        if unknown:
+            raise FieldError(
+                "sweep",
+                f"unknown synth parameter(s) {', '.join(unknown)} (sweep Spark settings with "
+                "a list in spark_conf)",
+            )
         return self
 
 
