@@ -31,12 +31,11 @@ from velocia.config.models import (
     K8sCluster,
     LocalCluster,
     Mode,
-    Suite,
     VelociaConfig,
 )
 from velocia.datagen.duckdb_tpc import dataset_id as make_dataset_id
 from velocia.datagen.manifest import DatasetManifest, results_label
-from velocia.datagen.tera import tera_dataset_id
+from velocia.datagen.tera import SPARK_SUITES, spark_dataset_id
 from velocia.engines import cluster_checks
 from velocia.engines.docker import inspect_image
 from velocia.engines.registry import Engine, load_engines
@@ -179,8 +178,8 @@ def prepare(path: Path, config: VelociaConfig, cluster_gate: bool = True) -> Pre
         ds_id = wl.dataset_id
     elif wl.scale_factor is not None:
         ds_id = make_dataset_id(wl.suite, wl.scale_factor, wl.format)
-    elif wl.rows is not None and wl.suite is Suite.tera:
-        ds_id = tera_dataset_id(wl.rows, wl.format)
+    elif wl.rows is not None and wl.suite in SPARK_SUITES:
+        ds_id = spark_dataset_id(wl.suite, wl.rows, wl.format)
     else:
         raise RunError("workload needs scale_factor, rows or dataset_id")
     manifest_path = Path(config.results_dir) / "datasets" / f"{ds_id}.json"

@@ -18,7 +18,7 @@ from velocia.bundle.validate import validate_bundle
 from velocia.collect.redaction import Redactor
 from velocia.config import ConfigError, VelociaConfig, load_model, models
 from velocia.datagen.duckdb_tpc import DatagenError, generate
-from velocia.datagen.tera import generate_tera
+from velocia.datagen.tera import generate_spark_suite
 from velocia.doctor import doctor as run_doctor
 from velocia.doctor import engine_check
 from velocia.engines.docker import DockerError, build_image, inspect_image
@@ -61,6 +61,7 @@ class Suite(StrEnum):
     tpch = "tpch"
     tpcds = "tpcds"
     tera = "tera"
+    text = "text"
 
 
 class DataFormat(StrEnum):
@@ -117,7 +118,7 @@ def _root(
 def datagen(
     suite: Annotated[Suite, typer.Option(help="Dataset suite.")],
     sf: Annotated[float | None, typer.Option(help="Scale factor (tpch, tpcds).")] = None,
-    rows: Annotated[int | None, typer.Option(help="Row count (tera).")] = None,
+    rows: Annotated[int | None, typer.Option(help="Row count (tera), line count (text).")] = None,
     data_format: Annotated[
         DataFormat, typer.Option("--format", help="File format.")
     ] = DataFormat.parquet_zstd,
@@ -130,12 +131,13 @@ def datagen(
     results_dir = Path(_config().results_dir)
     fmt = models.DataFormat(data_format.value)
     try:
-        if suite is Suite.tera:
+        if suite in (Suite.tera, Suite.text):
             if rows is None:
-                _fail("--rows is required for --suite tera")
+                _fail(f"--rows is required for --suite {suite.value}")
             if sf is not None:
-                _fail("--sf does not apply to --suite tera")
-            manifest, created = generate_tera(
+                _fail(f"--sf does not apply to --suite {suite.value}")
+            manifest, created = generate_spark_suite(
+                models.Suite(suite.value),
                 rows,
                 fmt,
                 out or results_dir / "data",

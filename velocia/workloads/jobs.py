@@ -19,3 +19,6 @@ class JobWorkload:
 
 
 TERA = JobWorkload(Suite.tera, "TeraSort-style sort (DataFrame API)", ("terasort",))
+TEXT = JobWorkload(
+    Suite.text, "Sort and WordCount on generated text (DataFrame API)", ("sort", "wordcount")
+)

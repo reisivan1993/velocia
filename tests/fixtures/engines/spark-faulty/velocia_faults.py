@@ -1,6 +1,7 @@
 """Planted faults for Velocia's tests: wraps SparkSession.sql once pyspark is imported.
 
-spark.velocia.test.fault = wrong  -> every query result is cut to one row (wrong results)
+spark.velocia.test.fault = wrong  -> every query result is cut to one row, and grouped counts
+                                     are off by one (wrong results)
                          = noisy  -> each query first sleeps 1.5 s x its repetition number (high
                                      variation, independent of how fast the machine is)
                          = slow   -> each query first runs a Spark job far longer than any timeout
@@ -49,6 +50,18 @@ def _patch(module):
 
     DataFrame.orderBy = order_by
     DataFrame.sort = order_by
+
+    from pyspark.sql.group import GroupedData
+
+    original_count = GroupedData.count
+
+    def count(self):
+        df = original_count(self)
+        if df.sparkSession.conf.get("spark.velocia.test.fault", "") == "wrong":
+            return df.withColumn("count", df["count"] + 1)
+        return df
+
+    GroupedData.count = count
 
 
 class _Hook(importlib.abc.MetaPathFinder):

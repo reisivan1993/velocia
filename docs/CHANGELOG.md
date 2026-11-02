@@ -1,5 +1,11 @@
 # Spec changelog
 
+## 2026-11-02 — Sort and WordCount (T28)
+
+- `velocia datagen --suite text --rows N` (03 §2 said `--bytes N`; `rows` counts lines and reuses the existing `workload.rows` field, so experiment schemas and config hashes don't change). Dataset ids `text-rows<N>-<format>`, table `text` with one `line` column: ten words per line from a 50,000-word vocabulary skewed toward a few common words, seed 42.
+- Workload `text` with units `sort` and `wordcount`, written with the DataFrame API like TeraSort (D-11), not Scala RDD as 03 §1.2 lists, so accelerated engines are measured. `sort` is validated like TeraSort (order within and across files, rows and checksum equal to the input); `wordcount` by its counts adding up to the input's word count, each word once, and rows and checksum equal to the reference engine.
+- `run.json`'s `teragen` parameters gain `generator` (`tera` or `text`).
+
 ## 2026-11-02 — measure plugins (T39)
 
 - Python measure plugins via the `velocia.measures` entry point group, as specified in 04 §5 (interface made precise: `compute` takes a dict of formula inputs). Network access or an exception in a plugin fails the run. Plugin measures count as normalized measures for cross-hardware experiments, like formula measures. `accelerator_hours` and `energy_kwh` were already built in; accelerators are recorded as `declared` (profile) everywhere until a probe plugin detects them.

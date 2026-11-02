@@ -7,7 +7,7 @@ checked before anything runs, and errors name the field (for example `engines[1]
 name: tpch-aqe                     # results are stored under <name>-<timestamp>
 workload:
   kind: sql                        # sql or job
-  suite: tpch                      # tpch (22 queries) or tera (TeraSort)
+  suite: tpch                      # tpch (22 queries), tera (TeraSort) or text
   units: all                       # or a list: [q1, q6]
   scale_factor: 1                  # tpch; generate first: velocia datagen --suite tpch --sf 1
   format: parquet-zstd             # or parquet-snappy
@@ -31,12 +31,27 @@ workload: {kind: job, suite: tera, units: [terasort], rows: 10000000}
 with data from `velocia datagen --suite tera --rows 10000000` (a seeded Spark job; the same row
 count always gives the same data).
 
+Sort and WordCount on generated text (lines of ten words from a skewed vocabulary):
+
+```yaml
+workload: {kind: job, suite: text, units: [sort, wordcount], rows: 10000000}
+```
+
+with data from `velocia datagen --suite text --rows 10000000` (`rows` counts lines). `sort`
+sorts the lines and writes them; its validator checks the order and that the output has the
+same rows as the input. `wordcount` writes `(word, count)` pairs; the counts must add up to
+the number of words in the input, and the result must match the reference engine.
+
+Jobs use the DataFrame API, so engines that replace Spark's operators (Comet, Gluten, hardware
+accelerators) are measured on them.
+
 ## Clusters
 
 `runner: local` runs each Spark application in its own Docker container on this machine, in
 Spark's local mode with `executors x executor_cores` cores and all executor memory for the driver.
-Kubernetes (`k8s`) and existing clusters (`external`, for example a vendor's accelerator servers)
-are planned; their fields are already in the schema.
+`runner: external` submits to an existing cluster, for example a vendor's accelerator servers:
+see [External clusters](external.md). Kubernetes (`k8s`) is planned; its fields are already in
+the schema.
 
 Several clusters, with engines pinned to them:
 

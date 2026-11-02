@@ -37,7 +37,7 @@ jobs:
     # the HTML report with one custom YAML measure, plus the planted faults.
     needs: checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -48,12 +48,13 @@ jobs:
         run: |
           uv run velocia engines build spark-vanilla
           uv run velocia engines build spark-comet
-      - name: Integration (target < 15 minutes)
+      - name: Integration
         run: >
           uv run pytest -m docker --basetemp=${{ runner.temp }}/pytest
           tests/test_e2e_local.py::test_full_pipeline
           tests/test_planted_faults.py
           tests/test_tera.py
+          tests/test_text.py
           tests/test_workloads.py
           tests/test_external.py
       - name: Keep reports of failed tests
