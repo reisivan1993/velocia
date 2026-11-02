@@ -10,4 +10,7 @@ spark_conf:
   # Sizing default for small runs; experiments override it via spark_conf for real clusters.
   spark.memory.offHeap.size: 2g
   spark.gluten.sql.columnar.forceShuffledHashJoin: "true"
+  # Arrow's off-heap buffers on Java 17 (else: "sun.misc.Unsafe or DirectByteBuffer not available")
+  spark.driver.extraJavaOptions: "-Dio.netty.tryReflectionSetAccessible=true"
+  spark.executor.extraJavaOptions: "-Dio.netty.tryReflectionSetAccessible=true"
 notes: "Apache Gluten 1.7.0 (Velox) on Apache Spark 3.5.9, built from velocia/engines/builtin/spark-gluten/Dockerfile"
