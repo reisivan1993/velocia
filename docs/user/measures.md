@@ -59,3 +59,32 @@ Formulas are parsed, never executed: numbers, `+ - * / // % **`, `min`, `max`, `
 
 `velocia measures check measures/vendor_cu.yaml` validates a file. Anything else, an unknown
 input, attribute access or a function call, is rejected before a run starts.
+
+## Python plugins
+
+For a measure a formula can't express, install a Python package that registers an object in
+the `velocia.measures` entry point group:
+
+```toml
+# the plugin package's pyproject.toml
+[project.entry-points."velocia.measures"]
+apu_seconds = "my_measures:ApuSeconds"
+```
+
+```python
+class ApuSeconds:
+    name = "apu_seconds"
+    unit = "device·s"
+    direction = "lower"
+
+    @staticmethod
+    def compute(inputs):  # the same names formulas use
+        devices = inputs.get("hw.accelerators_per_node")
+        if not devices:
+            return None  # missing input: null with a reason, never a guess
+        return inputs["unit.wall_s"] * inputs["cluster.nodes"] * devices
+```
+
+Plugins must be pure and offline. `compute` runs with network access blocked; a plugin that
+tries the network, or raises, fails the run. Manifests record the plugin and a hash of its
+source code.

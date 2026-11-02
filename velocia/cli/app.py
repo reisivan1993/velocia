@@ -13,6 +13,9 @@ from typing import Annotated, NoReturn
 import typer
 
 from velocia import __version__
+from velocia.bundle.export import BundleError, export_bundle
+from velocia.bundle.validate import validate_bundle
+from velocia.collect.redaction import Redactor
 from velocia.config import ConfigError, VelociaConfig, load_model, models
 from velocia.datagen.duckdb_tpc import DatagenError, generate
 from velocia.datagen.tera import generate_tera
@@ -308,6 +311,46 @@ def compare(
     typer.echo(f"{experiment_b} {verdict} {experiment_a}")
     if not result.reproduces:
         raise typer.Exit(1)
+
+
+@app.command()
+def bundle(
+    experiment_id: Annotated[
+        str | None, typer.Argument(help="Experiment to export.", show_default=False)
+    ] = None,
+    out: Annotated[Path | None, typer.Option(help="Output zip file.")] = None,
+    strip_sql: Annotated[
+        bool, typer.Option(help="Remove SQL text and plan literals from event logs.")
+    ] = False,
+    validate: Annotated[
+        Path | None, typer.Option(help="Validate a bundle file instead of exporting.")
+    ] = None,
+) -> None:
+    """Export a benchmark bundle (or validate one with --validate)."""
+    if validate is not None:
+        problems, notes = validate_bundle(validate)
+        for line in notes:
+            typer.echo(f"  note: {line}")
+        for line in problems:
+            typer.echo(f"  problem: {line}")
+        if problems:
+            _fail(f"{validate}: not a valid benchmark bundle v1")
+        typer.echo(f"{validate}: valid benchmark bundle v1")
+        return
+    if experiment_id is None:
+        _fail("give an experiment ID to export, or --validate FILE")
+    config = _config()
+    try:
+        path = export_bundle(
+            Path(config.results_dir),
+            experiment_id,
+            out,
+            strip_sql,
+            Redactor(config.redaction.key_patterns),
+        )
+    except BundleError as exc:
+        _fail(str(exc))
+    typer.echo(f"Bundle: {path}")
 
 
 @app.command()

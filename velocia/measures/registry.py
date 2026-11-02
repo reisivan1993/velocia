@@ -6,6 +6,7 @@ from pathlib import Path
 from velocia.config import ConfigError, MeasureDef, load_model
 from velocia.measures.builtins import BUILTINS, ClusterInputs, Measure, UnitInputs, Value
 from velocia.measures.formula import Formula, FormulaError, hw_inputs, parse
+from velocia.measures.plugins import PluginError, plugin_entries, plugin_measure
 
 
 def _inputs(u: UnitInputs, c: ClusterInputs) -> dict[str, float | None]:
@@ -60,4 +61,13 @@ def load_measures(measures_dir: Path | None) -> dict[str, Measure]:
         for path in sorted(measures_dir.glob("*.yaml")):
             measure = load_measure_file(path)
             measures[measure.name] = measure
+    for entry in plugin_entries():
+        where = Path(f"<entry point {entry.name} = {entry.value}>")
+        try:
+            measure = plugin_measure(entry, _inputs)
+        except (PluginError, ImportError) as exc:
+            raise ConfigError(where, [("", str(exc))]) from exc
+        if measure.name in measures:
+            raise ConfigError(where, [("name", f"{measure.name!r} is already defined")])
+        measures[measure.name] = measure
     return measures

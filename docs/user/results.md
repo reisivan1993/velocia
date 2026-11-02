@@ -12,10 +12,29 @@ Everything goes into the results directory (`./velocia-results` by default):
 | `runs/<run_id>/checks.json` | per unit: row count and checksum, or the validator's verdict |
 | `runs/<run_id>/eventlog/` | Spark event logs |
 | `datasets/<dataset_id>.json` | dataset manifests (generator, parameters, checksum) |
+| `bundles/<experiment_id>.bundle.zip` | benchmark bundle, written by `velocia bundle` |
 | `catalog.duckdb` | all of the above, queryable with DuckDB |
 
 Formats are versioned (`format` and `version` fields) and documented in
 `docs/04-interfaces.md`.
+
+## Sharing results: bundles
+
+```bash
+velocia bundle <experiment_id>               # bundles/<experiment_id>.bundle.zip
+velocia bundle <experiment_id> --strip-sql   # for sharing outside your team
+velocia bundle --validate some.bundle.zip
+```
+
+A bundle is one zip with the experiment, dataset manifest, hardware profiles, measure
+definitions, every run's manifest, timings and checks, the redacted event logs, the results
+table and `pairing.parquet`. The pairing table has one row per engine per unit, configuration
+and mode, pointing at the median repetition; its `run_id` and `rep` find that execution in the
+event logs by its job tag `velocia:<run_id>:<unit_id>:<rep>`. Any analysis tool can read a
+bundle; Velocia has no other way out.
+
+Event logs contain SQL text, file paths and literal values from your queries. `--strip-sql`
+blanks those but keeps plan operators, metrics and tags.
 
 ## Secrets
 

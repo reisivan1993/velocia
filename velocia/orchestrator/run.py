@@ -48,6 +48,7 @@ from velocia.families.spark.package import DriverPackage, build_driver
 from velocia.hardware.probe import hardware_manifest_hash, probe_local
 from velocia.measures.builtins import ClusterInputs, Measure, UnitInputs
 from velocia.measures.formula import parse, unknown_hw_inputs
+from velocia.measures.plugins import PluginError
 from velocia.measures.registry import load_measures
 from velocia.runners.base import AppResult, AppSpec
 from velocia.runners.external import ExternalRunner, declared_hardware
@@ -266,7 +267,10 @@ def check_hardware(
             "compared within one hardware manifest. To compare anyway, set "
             "comparison.allow_cross_hardware: true and add a normalized measure such as cost_usd"
         )
-    if not any(m.name in NORMALIZED_MEASURES or m.formula for m in measures):
+    if not any(
+        m.name in NORMALIZED_MEASURES or m.formula or m.source.startswith("plugin:")
+        for m in measures
+    ):
         raise RunError(
             "a cross-hardware comparison needs at least one normalized measure next to time "
             "(cost_usd, node_hours, accelerator_hours, energy_kwh or a custom formula)"
@@ -755,7 +759,10 @@ def compute_results(
             telemetry=UnitSummary(**telemetry).telemetry() if telemetry else {},
         )
         for m in prepared.measures:
-            value, reason = m.compute(inputs, cluster_inputs[ur["cell_key"]])
+            try:
+                value, reason = m.compute(inputs, cluster_inputs[ur["cell_key"]])
+            except PluginError as exc:
+                raise RunError(str(exc)) from exc
             mv_rows.append(
                 {
                     "run_id": ur["run_id"],

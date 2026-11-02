@@ -7,6 +7,7 @@ import signal
 import subprocess
 import sys
 import time
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,9 @@ pytestmark = [
     pytest.mark.docker,
     pytest.mark.skipif(shutil.which("docker") is None, reason="docker not available"),
 ]
+
+# The local runner drops the page cache only on a Linux host (D-5).
+COLD = "cold" if sys.platform == "linux" else "cold (cache not dropped)"
 
 EXPERIMENT = """
 name: e2e
@@ -70,11 +74,20 @@ def test_full_pipeline(
     _measure_and_profile(tmp_path)
     result = cli.invoke(app, ["run", "exp.yaml"])
     assert result.exit_code == 0, result.output
-    assert "spark-comet vs spark-vanilla (cold (cache not dropped))" in result.output
+    assert f"spark-comet vs spark-vanilla ({COLD})" in result.output
     assert "correctness pass" in result.output
     assert "[95% CI" in result.output
 
     results = tmp_path / "velocia-results"
+    experiment_id = next((results / "reports").iterdir()).name
+    bundled = cli.invoke(app, ["bundle", experiment_id])
+    assert bundled.exit_code == 0, bundled.output
+    bundle_file = results / "bundles" / f"{experiment_id}.bundle.zip"
+    checked = cli.invoke(app, ["bundle", "--validate", str(bundle_file)])
+    assert checked.exit_code == 0 and "valid benchmark bundle v1" in checked.output
+    with zipfile.ZipFile(bundle_file) as zf:
+        zf.extractall(tmp_path / "bundle")
+    planted_secrets.assert_absent(tmp_path / "bundle")
     planted_secrets.assert_absent(results)
     report_dir = next((results / "reports").iterdir())
     report = json.loads((report_dir / "report.json").read_text())

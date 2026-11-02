@@ -1,0 +1,102 @@
+{
+  "$defs": {
+    "Producer": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "const": "velocia",
+          "default": "velocia",
+          "title": "Name",
+          "type": "string"
+        },
+        "version": {
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "version"
+      ],
+      "title": "Producer",
+      "type": "object"
+    }
+  },
+  "$id": "urn:velocia:schema:bundle:v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "cross_hardware": {
+      "title": "Cross Hardware",
+      "type": "boolean"
+    },
+    "engines": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Engines",
+      "type": "array"
+    },
+    "experiment_id": {
+      "title": "Experiment Id",
+      "type": "string"
+    },
+    "format": {
+      "const": "benchmark-bundle",
+      "default": "benchmark-bundle",
+      "title": "Format",
+      "type": "string"
+    },
+    "hardware_manifest_hashes": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Hardware Manifest Hashes",
+      "type": "array"
+    },
+    "label": {
+      "title": "Label",
+      "type": "string"
+    },
+    "producer": {
+      "$ref": "#/$defs/Producer"
+    },
+    "reference_engine": {
+      "title": "Reference Engine",
+      "type": "string"
+    },
+    "sql_stripped": {
+      "default": false,
+      "title": "Sql Stripped",
+      "type": "boolean"
+    },
+    "unit_tag_format": {
+      "const": "velocia:<run_id>:<unit_id>:<rep>",
+      "default": "velocia:<run_id>:<unit_id>:<rep>",
+      "title": "Unit Tag Format",
+      "type": "string"
+    },
+    "version": {
+      "const": 1,
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "created_at",
+    "producer",
+    "experiment_id",
+    "reference_engine",
+    "engines",
+    "hardware_manifest_hashes",
+    "cross_hardware",
+    "label"
+  ],
+  "title": "BundleManifest",
+  "type": "object"
+}

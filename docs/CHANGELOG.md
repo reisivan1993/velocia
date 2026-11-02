@@ -1,5 +1,13 @@
 # Spec changelog
 
+## 2026-11-02 — measure plugins (T39)
+
+- Python measure plugins via the `velocia.measures` entry point group, as specified in 04 §5 (interface made precise: `compute` takes a dict of formula inputs). Network access or an exception in a plugin fails the run. Plugin measures count as normalized measures for cross-hardware experiments, like formula measures. `accelerator_hours` and `energy_kwh` were already built in; accelerators are recorded as `declared` (profile) everywhere until a probe plugin detects them.
+
+## 2026-11-02 — benchmark bundle (T44)
+
+- `velocia bundle <experiment_id> [--out FILE] [--strip-sql]` and `velocia bundle --validate FILE` implemented (04 §7). `bundle.json` gains `sql_stripped` and `label`; bundles also carry `runs/<run_id>/checks.json`. The pairing row is the median successful repetition, lower middle for even counts. JSON Schema `schemas/bundle.schema.json`. Default output `<results_dir>/bundles/<experiment_id>.bundle.zip`.
+
 ## 2026-10-25 — cluster smoke-test gate (T43)
 
 - `velocia engines check <engine> --cluster <name> --experiment <file>`: the smoke test (q1, q3, q6 at SF0.01 and a 100,000-row TeraSort, correctness required) with the engine on that cluster and `spark-vanilla` locally as the reference. A pass is recorded in `<results_dir>/_checks/cluster-checks.json` under a hash of the engine definition and the cluster configuration; `velocia run` refuses an external cluster without a matching pass, so a changed image, conf or cluster needs a new check.

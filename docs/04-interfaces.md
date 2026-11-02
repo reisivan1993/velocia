@@ -88,7 +88,7 @@ custom:                 # free-form coefficients for custom measures, exposed as
 | `velocia.families` | `Family.driver_program`, `submission(cell) → spec`, `tag(run_id, unit_id, rep) → str`, `read_telemetry(dir) → [UnitSummary]`, `checksum(result) → Checksum` |
 | `velocia.engines` | `Engine.family`, `image`, `config`, `supports(version) → bool` |
 | `velocia.workloads` | `Workload.kind`, `units(dataset) → [Unit]`, `datagen(spec)`, `validator(unit) → Validator` |
-| `velocia.measures` | `Measure.name`, `unit`, `direction`, `inputs`, `compute(inputs) → float \| None` (pure, offline) |
+| `velocia.measures` | An object with `name`, `unit`, `direction` (`lower`\|`higher`) and `compute(inputs) → float \| None`; `inputs` is a dict of the formula input names (`unit.*`, `cluster.*`, `hw.*`). Pure and offline: `compute` runs with sockets blocked, and a plugin that uses the network or raises fails the run. Manifests record `source: plugin:<module>:<attr>` and the SHA-256 of the plugin module's source. A name that clashes with a built-in or file measure is rejected |
 | `velocia.hardware` | `Probe.detect(node) → dict` |
 
 ## 6. Output formats
@@ -123,6 +123,7 @@ hardware/<profile>.yaml
 measures/<measure>.yaml
 runs/<run_id>/manifest.json
 runs/<run_id>/timings.json
+runs/<run_id>/checks.json         # correctness pass runs
 runs/<run_id>/eventlog/...        # redacted Spark event logs
 results/results.parquet
 pairing.parquet
@@ -140,10 +141,12 @@ pairing.parquet
   "engines": ["spark-vanilla", "spark-gluten"],
   "hardware_manifest_hashes": ["sha256:..."],
   "cross_hardware": false,
-  "unit_tag_format": "velocia:<run_id>:<unit_id>:<rep>"
+  "unit_tag_format": "velocia:<run_id>:<unit_id>:<rep>",
+  "sql_stripped": false,
+  "label": "Data derived from TPC-H; not an official TPC result."
 }
 ```
 
-`pairing.parquet`: `unit_id, config_hash, mode, engine, cluster, hardware_manifest_hash, run_id, rep, wall_ms, is_reference`. One row per engine per (unit, config, mode), pointing at the median repetition, so a consumer can find the matching reference and accelerated executions inside the event logs by their job-description tags.
+`pairing.parquet`: `unit_id, config_hash, mode, engine, cluster, hardware_manifest_hash, run_id, rep, wall_ms, is_reference`. One row per engine per (unit, config, mode), pointing at the median repetition (successful, non-discarded timed repetitions; with an even count the lower middle one, so the row is always a real execution), so a consumer can find the matching reference and accelerated executions inside the event logs by their job-description tags.
 
-The bundle format is documented in the repo with a JSON Schema and a validator (`velocia bundle --validate FILE`).
+The bundle format is documented in the repo with a JSON Schema (`schemas/bundle.schema.json`, for `bundle.json`) and a validator (`velocia bundle --validate FILE`), which checks `bundle.json`, the required files, run manifests, pairing columns, one row per engine per (unit, config, mode), and that every pairing row points at a run in the bundle. A bundle is exported only for a finished experiment. With `--strip-sql`, event logs keep plan node names, metrics and Velocia tags, but SQL text, plan strings (literals, paths), plan metadata, stage details and call sites are blanked.
