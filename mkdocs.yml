@@ -10,6 +10,7 @@ nav:
   - Measures: measures.md
   - Engines: engines.md
   - Kubernetes: kubernetes.md
+  - AWS: aws.md
   - External clusters: external.md
   - Results and reports: results.md
   - Troubleshooting: troubleshooting.md

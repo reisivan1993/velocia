@@ -8,7 +8,7 @@ import json
 import os
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated, NoReturn
+from typing import Annotated, Any, NoReturn
 
 import typer
 
@@ -196,6 +196,9 @@ def run(
     dry_run: Annotated[bool, typer.Option(help="Print expanded cells and estimates.")] = False,
     results_dir: Annotated[Path | None, typer.Option(help="Results directory.")] = None,
     resume: Annotated[bool, typer.Option(help="Continue an interrupted experiment.")] = False,
+    yes: Annotated[
+        bool, typer.Option("--yes", help="Don't ask before creating paid cloud resources.")
+    ] = False,
 ) -> None:
     """Expand an experiment into cells and execute them."""
     try:
@@ -220,6 +223,7 @@ def run(
         return
     config = _config()
     out_dir = results_dir or Path(config.results_dir)
+    _confirm_cloud_spend(spec, yes)
     try:
         ensure_synth_datasets(
             spec, Path(config.results_dir), min(os.cpu_count() or 4, 8), typer.echo
@@ -277,6 +281,165 @@ def _print_dry_run(spec: models.Experiment) -> None:
             f"{format_duration(est.worst_case)} if every unit hits the "
             f"{spec.timeout_per_unit} timeout)"
         )
+    _print_aws_plan(spec)
+
+
+def _confirm_cloud_spend(spec: models.Experiment, yes: bool) -> None:
+    """AWS clusters cost money: show the estimate and ask, unless --yes."""
+    from velocia.orchestrator.run import aws_estimates
+
+    estimates = aws_estimates(spec)
+    if not estimates or yes:
+        return
+    for name, usd in estimates.items():
+        cluster = spec.named_clusters[name]
+        assert isinstance(cluster, models.AwsCluster)
+        cost = "unknown" if usd < 0 else f"~${usd:.2f}"
+        typer.echo(
+            f"This creates an EKS cluster ({cluster.executors} x {cluster.node_type} in "
+            f"{cluster.region}) on your AWS account: estimated {cost}, hard cap "
+            f"${cluster.budget_usd:.2f}. See the commands with --dry-run."
+        )
+    if not typer.confirm("Create the AWS resources and run?", default=False):
+        _fail("not started")
+
+
+def _print_aws_plan(spec: models.Experiment) -> None:
+    """For aws clusters: the estimated cost against the cap and every command, run nothing."""
+    from velocia.orchestrator.run import aws_estimates
+    from velocia.runners.aws import AwsProvisioner, DryRunShell, hourly_usd
+
+    for name, usd in aws_estimates(spec).items():
+        cluster = spec.named_clusters[name]
+        assert isinstance(cluster, models.AwsCluster)
+        cost = "unknown (no duration estimate)" if usd < 0 else f"~${usd:.2f}"
+        verdict = "" if 0 <= usd <= cluster.budget_usd else "  ABOVE THE CAP: run refuses"
+        typer.echo(
+            f"AWS cluster {name}: {cluster.executors} x {cluster.node_type} in {cluster.region}, "
+            f"${hourly_usd(cluster):.2f}/h; estimated {cost} of budget_usd "
+            f"${cluster.budget_usd:.2f}{verdict}"
+        )
+        shell = DryRunShell(
+            answers={
+                "get-caller-identity": "<account>",
+                "describe-cluster": '{"subnetIds": ["<subnet>"], "clusterSecurityGroupId": "<sg>"}',
+                "create-file-system": "<efs-id>",
+                "create-mount-target": "<mount-target>",
+            }
+        )
+        clusters_dir = Path(_config().results_dir) / "clusters"
+        prov = AwsProvisioner(cluster, f"velocia-{name}-<experiment>", shell, clusters_dir)
+        known = load_engines(_user_engines_dir())
+        prov.provision(
+            sorted(
+                {
+                    known[r.name].definition.image
+                    for r in spec.engine_refs
+                    if (r.cluster or next(iter(spec.named_clusters))) == name
+                }
+            )
+        )
+        created = len(shell.commands)
+        prov.teardown()
+        typer.echo("  Creates (nothing is run by --dry-run):")
+        for command in shell.commands[:created]:
+            typer.echo(f"    {command}")
+        typer.echo("  Then runs the experiment with the k8s runner, and always deletes:")
+        for command in shell.commands[created:]:
+            typer.echo(f"    {command}")
+
+
+@app.command()
+def teardown(
+    region: Annotated[str, typer.Option(help="AWS region to clean up.")],
+    yes: Annotated[bool, typer.Option("--yes", help="Delete what is found.")] = False,
+) -> None:
+    """Find (and with --yes delete) AWS resources Velocia created and left behind."""
+    from velocia.runners.aws import AwsError, RealShell, leftovers
+
+    shell = RealShell(typer.echo)
+    try:
+        found = leftovers(region, shell)
+    except AwsError as exc:
+        _fail(str(exc))
+    if not any(found.values()):
+        typer.echo(f"Nothing left in {region}.")
+        return
+    for kind, names in found.items():
+        for name in names:
+            typer.echo(f"  {kind}: {name}")
+    if not yes:
+        typer.echo("Run again with --yes to delete these.")
+        return
+    problems = []
+    for repo in found["ecr"]:
+        argv = [
+            "aws",
+            "--region",
+            region,
+            "ecr",
+            "delete-repository",
+            "--repository-name",
+            repo,
+            "--force",
+        ]
+        problems += _attempt(shell, argv)
+    for fs in found["efs"]:
+        targets = shell(
+            [
+                "aws",
+                "--region",
+                region,
+                "efs",
+                "describe-mount-targets",
+                "--file-system-id",
+                fs,
+                "--query",
+                "MountTargets[].MountTargetId",
+                "--output",
+                "text",
+            ]
+        ).split()
+        for target in targets:
+            problems += _attempt(
+                shell,
+                [
+                    "aws",
+                    "--region",
+                    region,
+                    "efs",
+                    "delete-mount-target",
+                    "--mount-target-id",
+                    target,
+                ],
+            )
+        problems += _attempt(
+            shell, ["aws", "--region", region, "efs", "delete-file-system", "--file-system-id", fs]
+        )
+    for name in found["clusters"]:
+        problems += _attempt(
+            shell, ["eksctl", "delete", "cluster", "--name", name, "--region", region, "--wait"]
+        )
+    for problem in problems:
+        typer.echo(f"error: {problem}")
+    if problems:
+        raise typer.Exit(1)
+
+
+def _attempt(shell: Any, argv: list[str], retries: int = 0) -> list[str]:
+    import time
+
+    from velocia.runners.aws import AwsError
+
+    for attempt in range(retries + 1):
+        try:
+            shell(argv)
+            return []
+        except AwsError as exc:
+            if attempt == retries:
+                return [str(exc)]
+            time.sleep(10)
+    return []
 
 
 @app.command()

@@ -91,12 +91,27 @@ def test_external_with_s3(
         )
     )
     _docker(
-        "run", "-d", "--rm", "--label", "io.velocia.test=external", "--network",
-        standalone.network, "--name", name, "-p", "127.0.0.1::8333",
-        "-v", f"{s3_config}:/etc/seaweedfs/s3.json:ro", SEAWEEDFS,
-        "server", "-dir=/data", "-s3", "-s3.port=8333", "-s3.config=/etc/seaweedfs/s3.json",
+        "run",
+        "-d",
+        "--rm",
+        "--label",
+        "io.velocia.test=external",
+        "--network",
+        standalone.network,
+        "--name",
+        name,
+        "-p",
+        "127.0.0.1::8333",
+        "-v",
+        f"{s3_config}:/etc/seaweedfs/s3.json:ro",
+        SEAWEEDFS,
+        "server",
+        "-dir=/data",
+        "-s3",
+        "-s3.port=8333",
+        "-s3.config=/etc/seaweedfs/s3.json",
         "-master.volumeSizeLimitMB=64",
-    )  # fmt: skip
+    )
     port = _docker("port", name, "8333").splitlines()[0].rsplit(":", 1)[1]
     endpoint = f"http://127.0.0.1:{port}"
     for _ in range(60):  # the S3 gateway starts after the master and volume server

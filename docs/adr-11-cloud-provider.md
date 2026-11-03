@@ -99,3 +99,12 @@ the same hourly rate from the moment provisioning starts; at the cap it stops th
 
 **Teardown:** always in a `finally` path, in reverse order, continuing past errors and listing
 what could not be deleted; `velocia teardown` finds leftovers by their `velocia:run` tag.
+
+## Not done yet
+
+- **No run against real AWS yet**: everything is tested against recorded commands. The first
+  real run needs the owner's go-ahead and a small cap.
+- **SF100 data**: datasets are copied in from the workstation with `kubectl cp`, which does not
+  scale to SF100; on-cluster generation with the official kits (T49) is the next step.
+- IAM permissions needed by the caller are not listed yet (eksctl's documented minimum plus EFS
+  and ECR).

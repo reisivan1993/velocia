@@ -272,6 +272,7 @@ class K8sCluster(ClusterBase):
     volume_claim: str = "velocia"  # PVC mounted at /velocia in every pod (data, runs, logs)
     service_account: str = "spark"  # the driver's account; it creates executor pods
     context: str | None = None  # kubectl context; default: the current one
+    kubeconfig: str | None = None  # kubeconfig file; default: kubectl's usual lookup
 
 
 class ExternalCluster(ClusterBase):
@@ -288,7 +289,24 @@ class ExternalCluster(ClusterBase):
     docker_args: list[str] = []  # extra `docker run` arguments, e.g. mounts or env files
 
 
-Cluster = Annotated[LocalCluster | K8sCluster | ExternalCluster, Field(discriminator="runner")]
+class AwsCluster(ClusterBase):
+    """A cluster Velocia creates on AWS (EKS) for one experiment and always deletes (ADR-11).
+
+    One executor per node: ``executors`` nodes of ``node_type``.
+    """
+
+    runner: Literal["aws"]
+    region: str = Field(pattern=r"^[a-z]{2}(-gov)?-[a-z]+-\d$")
+    node_type: str = Field(min_length=1)
+    node_hour_usd: float = Field(gt=0)
+    budget_usd: float = Field(gt=0)
+    spot: bool = False
+    kubernetes_version: str = "1.33"
+
+
+Cluster = Annotated[
+    LocalCluster | K8sCluster | ExternalCluster | AwsCluster, Field(discriminator="runner")
+]
 
 
 class EngineRef(StrictModel):

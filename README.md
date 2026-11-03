@@ -48,7 +48,7 @@ See [`examples/demo/`](examples/demo/README.md).
 | Job workloads | TeraSort, Sort, WordCount, PageRank, KMeans (MLlib), a five-step ETL pipeline; your own Python or jar jobs |
 | Edge cases | Seeded skewed joins, hot keys, nulls, small files, wide rows, nested types, decimals, strings, windows, UDF fallback, swept as curves with CIs |
 | Engines | `spark-vanilla`, `spark-comet`, `spark-gluten` (x86 only), or any image you define |
-| Where | Docker on this machine, Kubernetes (Spark Operator), or a Spark cluster Velocia doesn't manage (for example a vendor's accelerator servers), with S3, HDFS or shared storage |
+| Where | Docker on this machine, Kubernetes (Spark Operator), an EKS cluster it creates on AWS with a hard budget cap, or a Spark cluster Velocia doesn't manage (for example a vendor's accelerator servers), with S3, HDFS or shared storage |
 | Outputs | HTML, Markdown and JSON reports; Parquet results; a benchmark bundle any analysis tool can read; a local read-only viewer |
 
 Results on TPC data are labeled "derived from TPC-H / TPC-DS". They are not official TPC
@@ -68,8 +68,8 @@ results.
 
 Pre-release (0.1.0.dev0). Milestones v0.1 (local harness) and v0.2 (jobs, edge cases,
 external clusters, bundles, viewer) are implemented, and the Kubernetes runner works (Spark
-Operator). Next: one cloud provider with a hard budget cap (v0.3). Not published to PyPI yet:
-install from a clone.
+Operator). The AWS runner (v0.3) is built and tested without a real AWS account; its first real
+run is next. Not published to PyPI yet: install from a clone.
 
 ## License
 

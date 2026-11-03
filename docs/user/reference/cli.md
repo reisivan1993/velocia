@@ -105,6 +105,16 @@ Expand an experiment into cells and execute them.
 | `--dry-run` |  | Print expanded cells and estimates. |
 | `--results-dir` |  | Results directory. |
 | `--resume` |  | Continue an interrupted experiment. |
+| `--yes` |  | Don't ask before creating paid cloud resources. |
+
+## `velocia teardown`
+
+Find (and with --yes delete) AWS resources Velocia created and left behind.
+
+| Argument or option | Default | Meaning |
+| --- | --- | --- |
+| `--region` |  | AWS region to clean up. |
+| `--yes` |  | Delete what is found. |
 
 ## `velocia ui`
 

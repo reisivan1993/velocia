@@ -30,12 +30,12 @@ class ClusterInputs:
     def of(
         cls, cluster: Cluster, profile: HardwareProfile | None, default_price: float
     ) -> "ClusterInputs":
-        # local: one machine; k8s and external: one executor per node (v0.1 assumption).
+        # local: one machine; k8s, external and aws: one executor per node.
         nodes = 1 if cluster.runner == "local" else cluster.executors
         memory_gb = _memory_gb(cluster.executor_memory)
-        return cls(
-            nodes, cluster.executors, cluster.executor_cores, profile, default_price, memory_gb
-        )
+        # An aws cluster states its node price; a hardware profile's price still wins.
+        price = getattr(cluster, "node_hour_usd", None) or default_price
+        return cls(nodes, cluster.executors, cluster.executor_cores, profile, price, memory_gb)
 
 
 def _memory_gb(size: str) -> float:

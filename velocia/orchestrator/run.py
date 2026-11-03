@@ -24,6 +24,7 @@ from velocia.collect.collector import collect
 from velocia.collect.redaction import Redactor
 from velocia.config import ConfigError, load_model
 from velocia.config.models import (
+    AwsCluster,
     Cluster,
     Experiment,
     ExternalCluster,
@@ -51,9 +52,17 @@ from velocia.measures.builtins import ClusterInputs, Measure, UnitInputs
 from velocia.measures.formula import parse, unknown_hw_inputs
 from velocia.measures.plugins import PluginError
 from velocia.measures.registry import load_measures
+from velocia.runners.aws import (
+    AwsProvisioner,
+    BudgetWatchdog,
+    Provisioned,
+    RealShell,
+    estimate_usd,
+    instance_platform,
+)
 from velocia.runners.base import AppResult, AppSpec
 from velocia.runners.external import ExternalRunner, declared_hardware
-from velocia.runners.k8s import K8sRunner, node_hardware
+from velocia.runners.k8s import K8sRunner, k8s_name, node_hardware
 from velocia.runners.local import LocalRunner, container_memory_mb, is_jar, keep_awake
 from velocia.stats.summary import ratio_ci, summarize
 from velocia.store.catalog import Catalog, as_json
@@ -189,6 +198,7 @@ def prepare(path: Path, config: VelociaConfig, cluster_gate: bool = True) -> Pre
     check_hardware(experiment, profiles, [available[m] for m in experiment.measures])
     warnings += memory_warnings(experiment, known, clusters)
     check_platforms(experiment, known, clusters, docker_platform)
+    check_aws(experiment, known, clusters, inspect_image)
 
     for measure in [available[m] for m in experiment.measures]:
         if measure.formula is None:
@@ -320,6 +330,60 @@ def check_platforms(
             )
 
 
+def aws_estimates(experiment: Experiment) -> dict[str, float]:
+    """Expected cost of each ``aws`` cluster in USD, or -1 when the duration can't be estimated."""
+    from velocia.experiment.estimate import estimate
+
+    cells = expand(experiment)
+    out = {}
+    for name, cluster in experiment.named_clusters.items():
+        if not isinstance(cluster, AwsCluster):
+            continue
+        mine = [c for c in cells if c.cluster_name == name]
+        duration = estimate(experiment, mine).duration
+        out[name] = estimate_usd(cluster, duration.total_seconds() / 3600) if duration else -1.0
+    return out
+
+
+def check_aws(
+    experiment: Experiment,
+    known: dict[str, Engine],
+    clusters: dict[str, Cluster],
+    inspect: Callable[[str], Any],
+) -> None:
+    """Before anything is created on AWS: the budget, and images that can run on the nodes."""
+    for name, usd in aws_estimates(experiment).items():
+        cluster = clusters[name]
+        assert isinstance(cluster, AwsCluster)
+        if usd < 0:
+            raise RunError(
+                f"cluster {name!r}: can't estimate the duration (unknown units), so the budget "
+                "can't be checked; list the units or use a built-in workload"
+            )
+        if usd > cluster.budget_usd:
+            raise RunError(
+                f"cluster {name!r}: estimated ${usd:.2f} is above budget_usd "
+                f"${cluster.budget_usd:.2f}; raise the cap or shrink the experiment"
+            )
+        nodes = instance_platform(cluster.node_type)
+        for ref in experiment.engine_refs:
+            if (ref.cluster or next(iter(clusters))) != name:
+                continue
+            definition = known[ref.name].definition
+            if definition.platforms and nodes not in definition.platforms:
+                raise RunError(
+                    f"{ref.name} runs on {', '.join(definition.platforms)} only; "
+                    f"{cluster.node_type} nodes are {nodes}"
+                )
+            info = inspect(definition.image)
+            if info is not None and f"linux/{info.architecture}" != nodes:
+                raise RunError(
+                    f"image {definition.image} is linux/{info.architecture} but "
+                    f"{cluster.node_type} nodes are {nodes}; build it for {nodes} "
+                    f"(docker buildx --platform {nodes}) or pick matching instances"
+                )
+
+
 def memory_warnings(
     experiment: Experiment,
     engines: dict[str, Engine],
@@ -401,6 +465,10 @@ class Orchestrator:
         self.redactor = Redactor(config.redaction.key_patterns)
         # (external cluster, dataset) pairs verified on the cluster's storage
         self._staged: set[tuple[str, str]] = set()
+        # aws clusters created for this run: provisioner, what it made, budget watchdog
+        self._clouds: dict[str, tuple[AwsProvisioner, Provisioned, BudgetWatchdog]] = {}
+        self.shell = RealShell(echo)
+        self._active: LocalRunner | ExternalRunner | K8sRunner | None = None
 
     # --- run ------------------------------------------------------------------------------
 
@@ -448,11 +516,14 @@ class Orchestrator:
             hardware = probe_local()  # the local runner's node; profiles added per cluster
             for warning in self.p.warnings:
                 self.echo(f"warning: {warning}")
-            for cell in cells:
-                if cell.cell_key in done:
-                    self.echo(f"[{cell.index}/{len(cells)}] {cell.label}: done, skipped")
-                    continue
-                self._run_cell(catalog, experiment_id, cell, len(cells), driver, hardware)
+            try:
+                for cell in cells:
+                    if cell.cell_key in done:
+                        self.echo(f"[{cell.index}/{len(cells)}] {cell.label}: done, skipped")
+                        continue
+                    self._run_cell(catalog, experiment_id, cell, len(cells), driver, hardware)
+            finally:
+                self._teardown_clouds()
 
             self.echo("Computing measures, statistics and correctness")
             compute_results(catalog, experiment_id, self.p, cells, self.config)
@@ -461,6 +532,57 @@ class Orchestrator:
             )
             catalog.update("experiment", {"experiment_id": experiment_id}, {"status": "done"})
         return experiment_id
+
+    def _cloud(self, experiment_id: str, cell: Cell) -> tuple[Provisioned, BudgetWatchdog]:
+        """The cell's AWS cluster, created at its first cell (budget watchdog started first)."""
+        if cell.cluster_name in self._clouds:
+            _, made, dog = self._clouds[cell.cluster_name]
+            return made, dog
+        cluster = cell.cluster
+        assert isinstance(cluster, AwsCluster)
+        name = k8s_name(f"velocia-{cell.cluster_name}-{experiment_id}")[:40].rstrip("-")
+        prov = AwsProvisioner(
+            cluster, name, self.shell, work_dir=self.results_dir / "clusters", echo=self.echo
+        )
+        (self.results_dir / "clusters").mkdir(parents=True, exist_ok=True)
+
+        def on_cap() -> None:
+            self.echo(f"budget cap ${cluster.budget_usd:.2f} reached on {name}: stopping")
+            active = self._active
+            if active is not None:
+                active.teardown()  # deletes the running application
+
+        dog = BudgetWatchdog(cluster, on_cap)
+        dog.start()
+        images = sorted(
+            {
+                self.p.engines[ref.name].definition.image
+                for ref in self.p.experiment.engine_refs
+                if (ref.cluster or next(iter(self.p.experiment.named_clusters)))
+                == cell.cluster_name
+            }
+        )
+        placeholder = Provisioned(k8s=None, images={})  # type: ignore[arg-type]
+        self._clouds[cell.cluster_name] = (prov, placeholder, dog)  # torn down even if this fails
+        made = prov.provision(images)
+        self._clouds[cell.cluster_name] = (prov, made, dog)
+        return made, dog
+
+    def _teardown_clouds(self) -> None:
+        for name, (prov, _, dog) in list(self._clouds.items()):
+            dog.stop()
+            self.echo(f"Deleting AWS cluster {prov.name} and its storage and images")
+            problems = prov.teardown()
+            for problem in problems:
+                self.echo(f"error: teardown: {problem}")
+            if problems:
+                self.echo(
+                    f"error: some AWS resources of {prov.name} may remain; check and delete "
+                    f"them: velocia teardown --region {prov.cluster.region}"
+                )
+            spent = dog.spent_usd()
+            self.echo(f"AWS cluster {name}: about ${spent:.2f} at list price")
+            del self._clouds[name]
 
     def _redacted_yaml(self) -> str:
         """The experiment as stored and reported: secrets in spark_conf etc. redacted."""
@@ -502,10 +624,14 @@ class Orchestrator:
     ) -> None:
         exp = self.p.experiment
         runner: LocalRunner | ExternalRunner | K8sRunner
+        dog: BudgetWatchdog | None = None
         if isinstance(cell.cluster, ExternalCluster):
             runner = ExternalRunner(cell.cluster)
         elif isinstance(cell.cluster, K8sCluster):
             runner = K8sRunner(cell.cluster)
+        elif isinstance(cell.cluster, AwsCluster):
+            made, dog = self._cloud(experiment_id, cell)
+            runner = K8sRunner(made.k8s, made.images)
         else:
             assert isinstance(cell.cluster, LocalCluster)
             runner = LocalRunner(cell.cluster, self.config.quiet_check.max_cpu_pct)
@@ -525,9 +651,8 @@ class Orchestrator:
             self._stage(runner, cell, driver, engine.definition.image)
             hardware = declared_hardware(cell.cluster_name, cell.cluster, profile)
         elif isinstance(runner, K8sRunner):
-            assert isinstance(cell.cluster, K8sCluster)
             self._stage(runner, cell, driver, engine.definition.image)
-            hardware = node_hardware(cell.cluster_name, cell.cluster, runner.nodes(), profile)
+            hardware = node_hardware(cell.cluster_name, runner.cluster, runner.nodes(), profile)
         else:
             hardware = {
                 **hardware_base,
@@ -609,9 +734,17 @@ class Orchestrator:
                     "manifest_json": None,
                 },
             )
+            if dog is not None and dog.reached.is_set():
+                raise RunError("stopped: budget cap reached")
+            self._active = runner
             try:
                 result = runner.run(app)
+            except Exception as exc:
+                if dog is not None and dog.reached.is_set():
+                    raise RunError("stopped: budget cap reached") from exc
+                raise
             finally:
+                self._active = None
                 runner.teardown()
             run_dir = self.results_dir / "runs" / run_id
             output = collect(result, run_dir, self.redactor)

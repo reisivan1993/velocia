@@ -1,5 +1,105 @@
 {
   "$defs": {
+    "AwsCluster": {
+      "additionalProperties": false,
+      "description": "A cluster Velocia creates on AWS (EKS) for one experiment and always deletes (ADR-11).\n\nOne executor per node: ``executors`` nodes of ``node_type``.",
+      "properties": {
+        "budget_usd": {
+          "description": "Hard cap: the run refuses to start if the estimate is above it, and stops and tears down when the running cost reaches it.",
+          "exclusiveMinimum": 0,
+          "title": "Budget Usd",
+          "type": "number"
+        },
+        "driver_memory": {
+          "default": "2g",
+          "description": "Driver memory, e.g. `2g`.",
+          "pattern": "^[1-9][0-9]*[kmgt]$",
+          "title": "Driver Memory",
+          "type": "string"
+        },
+        "executor_cores": {
+          "description": "Cores per executor.",
+          "minimum": 1,
+          "title": "Executor Cores",
+          "type": "integer"
+        },
+        "executor_memory": {
+          "description": "Memory per executor, e.g. `4g`.",
+          "pattern": "^[1-9][0-9]*[kmgt]$",
+          "title": "Executor Memory",
+          "type": "string"
+        },
+        "executors": {
+          "description": "Executors (local: multiplied by `executor_cores` for local[N]).",
+          "minimum": 1,
+          "title": "Executors",
+          "type": "integer"
+        },
+        "hardware_profile": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Hardware profile name (file in `hardware_dir`) describing the nodes.",
+          "title": "Hardware Profile"
+        },
+        "kubernetes_version": {
+          "default": "1.33",
+          "description": "EKS Kubernetes version.",
+          "title": "Kubernetes Version",
+          "type": "string"
+        },
+        "node_hour_usd": {
+          "description": "Price of one node for one hour, from the AWS price list (spot: your expected price). Velocia keeps no price table of its own.",
+          "exclusiveMinimum": 0,
+          "title": "Node Hour Usd",
+          "type": "number"
+        },
+        "node_type": {
+          "description": "EC2 instance type of the nodes; one executor per node, so it must fit `executor_cores` and `executor_memory`.",
+          "minLength": 1,
+          "title": "Node Type",
+          "type": "string"
+        },
+        "region": {
+          "description": "AWS region, e.g. `us-east-1`.",
+          "pattern": "^[a-z]{2}(-gov)?-[a-z]+-\\d$",
+          "title": "Region",
+          "type": "string"
+        },
+        "runner": {
+          "const": "aws",
+          "description": "`local` (Docker), `k8s`, `external` (a cluster Velocia doesn't manage) or `aws` (a cluster Velocia creates on AWS and deletes).",
+          "title": "Runner",
+          "type": "string"
+        },
+        "spot": {
+          "default": false,
+          "description": "Use spot instances (cheaper; a reclaimed node fails the run, which is reported).",
+          "title": "Spot",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "executors",
+        "executor_cores",
+        "executor_memory",
+        "runner",
+        "region",
+        "node_type",
+        "node_hour_usd",
+        "budget_usd"
+      ],
+      "title": "AwsCluster",
+      "type": "object"
+    },
     "Comparison": {
       "additionalProperties": false,
       "properties": {
@@ -194,7 +294,7 @@
         },
         "runner": {
           "const": "external",
-          "description": "`local` (Docker), `k8s` or `external` (a cluster Velocia doesn't manage).",
+          "description": "`local` (Docker), `k8s`, `external` (a cluster Velocia doesn't manage) or `aws` (a cluster Velocia creates on AWS and deletes).",
           "title": "Runner",
           "type": "string"
         },
@@ -289,6 +389,19 @@
           "description": "Hardware profile name (file in `hardware_dir`) describing the nodes.",
           "title": "Hardware Profile"
         },
+        "kubeconfig": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "kubeconfig file to use; default: kubectl's usual lookup.",
+          "title": "Kubeconfig"
+        },
         "namespace": {
           "default": "default",
           "description": "Kubernetes namespace.",
@@ -315,7 +428,7 @@
         },
         "runner": {
           "const": "k8s",
-          "description": "`local` (Docker), `k8s` or `external` (a cluster Velocia doesn't manage).",
+          "description": "`local` (Docker), `k8s`, `external` (a cluster Velocia doesn't manage) or `aws` (a cluster Velocia creates on AWS and deletes).",
           "title": "Runner",
           "type": "string"
         },
@@ -407,7 +520,7 @@
         },
         "runner": {
           "const": "local",
-          "description": "`local` (Docker), `k8s` or `external` (a cluster Velocia doesn't manage).",
+          "description": "`local` (Docker), `k8s`, `external` (a cluster Velocia doesn't manage) or `aws` (a cluster Velocia creates on AWS and deletes).",
           "title": "Runner",
           "type": "string"
         }
@@ -721,6 +834,7 @@
         {
           "discriminator": {
             "mapping": {
+              "aws": "#/$defs/AwsCluster",
               "external": "#/$defs/ExternalCluster",
               "k8s": "#/$defs/K8sCluster",
               "local": "#/$defs/LocalCluster"
@@ -736,6 +850,9 @@
             },
             {
               "$ref": "#/$defs/ExternalCluster"
+            },
+            {
+              "$ref": "#/$defs/AwsCluster"
             }
           ]
         },
@@ -754,6 +871,7 @@
             "^[a-z0-9][a-z0-9_.-]*$": {
               "discriminator": {
                 "mapping": {
+                  "aws": "#/$defs/AwsCluster",
                   "external": "#/$defs/ExternalCluster",
                   "k8s": "#/$defs/K8sCluster",
                   "local": "#/$defs/LocalCluster"
@@ -769,6 +887,9 @@
                 },
                 {
                   "$ref": "#/$defs/ExternalCluster"
+                },
+                {
+                  "$ref": "#/$defs/AwsCluster"
                 }
               ]
             }

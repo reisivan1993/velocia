@@ -1,5 +1,13 @@
 # Spec changelog
 
+## 2026-11-03 — AWS runner (T51-T54, built without real AWS runs)
+
+- `runner: aws` (ADR-11): `region`, `node_type`, `node_hour_usd`, `budget_usd`, `spot`, `kubernetes_version`, plus the usual executor fields (one executor per node). Velocia creates an EKS cluster (`eksctl`), EFS storage, ECR repositories, the Spark Operator (`helm`) and the volume claim, runs the experiment with the `k8s` runner, and deletes everything in a `finally` path. `K8sCluster` gains `kubeconfig`.
+- Budget: the estimate (nodes x `node_hour_usd` + control plane + NAT gateway, over provisioning time plus the estimated duration) must be below `budget_usd`; a watchdog stops the run at the cap ("stopped: budget cap reached") and tears down. `velocia run` asks before creating paid resources (`--yes` skips); `--dry-run` prints the estimate and every create and delete command.
+- `velocia teardown --region R [--yes]` lists (and deletes) leftovers by tag and name.
+- Images must match the nodes' architecture; a mismatch is refused before anything is created.
+- Not yet run against a real AWS account (the owner chose to build first without spending).
+
 ## 2026-11-03 — Kubernetes runner (T20)
 
 - `runner: k8s` works: one Spark Operator `SparkApplication` (`sparkoperator.k8s.io/v1beta2`, cluster mode) per run. New cluster fields `volume_claim` (default `velocia`: a PVC mounted at `/velocia` in every pod, holding datasets, run inputs, outputs and event logs), `service_account` (default `spark`) and `context`. `resources` maps to one device type per executor (the operator's executor resource limit).

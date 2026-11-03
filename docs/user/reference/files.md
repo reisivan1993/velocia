@@ -67,7 +67,7 @@ An experiment file (docs/04-interfaces.md §3).
 | `workload` | [Workload](#workload) | required | What to run. |
 | `engines` | list of string or [EngineRef](#engineref) | required | Engines to compare: names, or `{name, cluster}` with several clusters. |
 | `reference_engine` | string | required | The engine every ratio and correctness check is relative to. |
-| `cluster` | [LocalCluster](#localcluster) or [K8sCluster](#k8scluster) or [ExternalCluster](#externalcluster) (optional) | None | One cluster for every engine (or use `clusters`). |
+| `cluster` | [LocalCluster](#localcluster) or [K8sCluster](#k8scluster) or [ExternalCluster](#externalcluster) or [AwsCluster](#awscluster) (optional) | None | One cluster for every engine (or use `clusters`). |
 | `clusters` | object (optional) | None | Named clusters; each engine names its cluster. |
 | `spark_conf` | map of string or integer or number or boolean or list of string or integer or number or boolean | {} | Spark settings for every engine; a list sweeps the setting. |
 | `measures` | list of string | ['wall_time', 'task_cpu_time'] | Measures to compute; the first one is the headline. |
@@ -76,6 +76,25 @@ An experiment file (docs/04-interfaces.md §3).
 | `modes` | list of [Mode](#mode) | ['cold', 'warm'] | `cold` (fresh application per repetition) and/or `warm` (one application, one discarded warm-up). |
 | `timeout_per_unit` | string | '30m' | Per-unit time limit, e.g. `30m`; timed-out units are reported. |
 | `price_table` | object (optional) | None | USD per node-hour by hardware profile name; overrides the profiles' prices for `cost_usd`. |
+
+### AwsCluster
+
+A cluster Velocia creates on AWS (EKS) for one experiment and always deletes (ADR-11). One executor per node: ``executors`` nodes of ``node_type``.
+
+| Field | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `executors` | integer | required | Executors (local: multiplied by `executor_cores` for local[N]). |
+| `executor_cores` | integer | required | Cores per executor. |
+| `executor_memory` | string | required | Memory per executor, e.g. `4g`. |
+| `driver_memory` | string | '2g' | Driver memory, e.g. `2g`. |
+| `hardware_profile` | string (optional) | None | Hardware profile name (file in `hardware_dir`) describing the nodes. |
+| `runner` | `aws` | required | `local` (Docker), `k8s`, `external` (a cluster Velocia doesn't manage) or `aws` (a cluster Velocia creates on AWS and deletes). |
+| `region` | string | required | AWS region, e.g. `us-east-1`. |
+| `node_type` | string | required | EC2 instance type of the nodes; one executor per node, so it must fit `executor_cores` and `executor_memory`. |
+| `node_hour_usd` | number | required | Price of one node for one hour, from the AWS price list (spot: your expected price). Velocia keeps no price table of its own. |
+| `budget_usd` | number | required | Hard cap: the run refuses to start if the estimate is above it, and stops and tears down when the running cost reaches it. |
+| `spot` | boolean | False | Use spot instances (cheaper; a reclaimed node fails the run, which is reported). |
+| `kubernetes_version` | string | '1.33' | EKS Kubernetes version. |
 
 ### Comparison
 
@@ -110,7 +129,7 @@ An experiment file (docs/04-interfaces.md §3).
 | `executor_memory` | string | required | Memory per executor, e.g. `4g`. |
 | `driver_memory` | string | '2g' | Driver memory, e.g. `2g`. |
 | `hardware_profile` | string (optional) | None | Hardware profile name (file in `hardware_dir`) describing the nodes. |
-| `runner` | `external` | required | `local` (Docker), `k8s` or `external` (a cluster Velocia doesn't manage). |
+| `runner` | `external` | required | `local` (Docker), `k8s`, `external` (a cluster Velocia doesn't manage) or `aws` (a cluster Velocia creates on AWS and deletes). |
 | `master` | string | required | Spark master URL, e.g. `spark://host:7077`. |
 | `deploy_mode` | `client` \| `cluster` | 'client' | Only `client` so far: the driver runs on this machine. |
 | `data_uri` | string | required | Storage the executors read (`s3a://`, `hdfs://`, `file://`); datasets are copied there. |
@@ -130,7 +149,7 @@ An experiment file (docs/04-interfaces.md §3).
 | `executor_memory` | string | required | Memory per executor, e.g. `4g`. |
 | `driver_memory` | string | '2g' | Driver memory, e.g. `2g`. |
 | `hardware_profile` | string (optional) | None | Hardware profile name (file in `hardware_dir`) describing the nodes. |
-| `runner` | `k8s` | required | `local` (Docker), `k8s` or `external` (a cluster Velocia doesn't manage). |
+| `runner` | `k8s` | required | `local` (Docker), `k8s`, `external` (a cluster Velocia doesn't manage) or `aws` (a cluster Velocia creates on AWS and deletes). |
 | `namespace` | string | 'default' | Kubernetes namespace. |
 | `node_selector` | map of string | {} | Node labels the pods must match. |
 | `tolerations` | list of map of string | [] | Pod tolerations. |
@@ -138,6 +157,7 @@ An experiment file (docs/04-interfaces.md §3).
 | `volume_claim` | string | 'velocia' | PersistentVolumeClaim mounted at `/velocia` in every pod: datasets, run inputs, outputs and event logs. ReadWriteMany when executors span nodes. |
 | `service_account` | string | 'spark' | Service account of the driver pod; it must be allowed to create executor pods (the Spark Operator's chart sets one up). |
 | `context` | string (optional) | None | kubectl context to use; default: the current one. |
+| `kubeconfig` | string (optional) | None | kubeconfig file to use; default: kubectl's usual lookup. |
 
 ### KeyDistribution
 
@@ -150,7 +170,7 @@ An experiment file (docs/04-interfaces.md §3).
 | `executor_memory` | string | required | Memory per executor, e.g. `4g`. |
 | `driver_memory` | string | '2g' | Driver memory, e.g. `2g`. |
 | `hardware_profile` | string (optional) | None | Hardware profile name (file in `hardware_dir`) describing the nodes. |
-| `runner` | `local` | required | `local` (Docker), `k8s` or `external` (a cluster Velocia doesn't manage). |
+| `runner` | `local` | required | `local` (Docker), `k8s`, `external` (a cluster Velocia doesn't manage) or `aws` (a cluster Velocia creates on AWS and deletes). |
 
 ### Mode
 

@@ -158,11 +158,23 @@ def _build_jar(dest: Path) -> Path:
         "&& jar cf /src/job.jar VelociaJarJob.class"
     )
     subprocess.run(
-        ["docker", "run", "--rm", "--user", "0", "-v", f"{src}:/src", "--entrypoint", "sh",
-         "velocia/engine-spark-vanilla:3.5.9", "-c", script],
+        [
+            "docker",
+            "run",
+            "--rm",
+            "--user",
+            "0",
+            "-v",
+            f"{src}:/src",
+            "--entrypoint",
+            "sh",
+            "velocia/engine-spark-vanilla:3.5.9",
+            "-c",
+            script,
+        ],
         check=True,
         capture_output=True,
-    )  # fmt: skip
+    )
     jobs = dest / "jobs"
     jobs.mkdir(exist_ok=True)
     (jobs / "job.jar").write_bytes((src / "job.jar").read_bytes())
@@ -252,9 +264,17 @@ def test_jar_command_and_rules(tmp_path: Path) -> None:
         },
     )
     assert program(app_spec, "/d", "/c", "/w", "/data") == [
-        "--conf", "spark.velocia.run_id=e-c001-r2", "--conf", "spark.velocia.rep=2",
-        "--class", "com.example.Main", "/c/job.jar", "/data/lineitem", "x", "${table:nope}",
-    ]  # fmt: skip
+        "--conf",
+        "spark.velocia.run_id=e-c001-r2",
+        "--conf",
+        "spark.velocia.rep=2",
+        "--class",
+        "com.example.Main",
+        "/c/job.jar",
+        "/data/lineitem",
+        "x",
+        "${table:nope}",
+    ]
 
     config = VelociaConfig(results_dir=str(tmp_path / "r"))
     exp = tmp_path / "exp.yaml"

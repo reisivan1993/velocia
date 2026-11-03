@@ -1,0 +1,21 @@
+# v0.3 acceptance shape (ADR-11): TPC-DS-derived SF100 on an EKS cluster Velocia creates and
+# deletes, with a hard budget cap. Set node_hour_usd from the AWS price list for your region.
+# Images must match the nodes: m6i is x86 (build images with --platform linux/amd64 on Apple
+# silicon), m7g is Graviton (arm64).
+name: aws-tpcds-sf100
+workload: {kind: sql, suite: tpcds, scale_factor: 100}
+engines: [spark-vanilla, spark-comet]
+reference_engine: spark-vanilla
+cluster:
+  runner: aws
+  region: us-east-1
+  node_type: m6i.4xlarge       # 16 vCPU, 64 GiB
+  node_hour_usd: 0.768         # on-demand list price; check the AWS price list
+  budget_usd: 100
+  executors: 8                 # one executor per node
+  executor_cores: 14
+  executor_memory: 44g
+measures: [wall_time, cost_usd, node_hours]
+repetitions: 5
+modes: [cold]
+timeout_per_unit: 30m

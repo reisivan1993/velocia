@@ -13,6 +13,7 @@ run on) plus the hardware profile; cold mode can't drop node page caches ("cache
 dropped").
 """
 
+import dataclasses
 import json
 import re
 import shutil
@@ -138,7 +139,11 @@ TERMINAL = {"COMPLETED": "finished", "FAILED": "failed", "SUBMISSION_FAILED": "f
 
 class Kubectl:
     def __init__(self, cluster: K8sCluster) -> None:
-        self.base = ["kubectl", *(["--context", cluster.context] if cluster.context else [])]
+        self.base = [
+            "kubectl",
+            *(["--kubeconfig", cluster.kubeconfig] if cluster.kubeconfig else []),
+            *(["--context", cluster.context] if cluster.context else []),
+        ]
         self.namespace = cluster.namespace
 
     def __call__(
@@ -204,9 +209,11 @@ def node_hardware(
 
 
 class K8sRunner:
-    def __init__(self, cluster: K8sCluster) -> None:
+    def __init__(self, cluster: K8sCluster, images: dict[str, str] | None = None) -> None:
+        """``images``: where the cluster pulls each engine image from (e.g. its ECR copy)."""
         self.cluster = cluster
         self.kubectl = Kubectl(cluster)
+        self.images = images or {}
         self._apps: set[str] = set()
         self._helper: str | None = None
 
@@ -286,9 +293,12 @@ class K8sRunner:
         self.kubectl("apply", "-f", "-", stdin=json.dumps(manifest))
         self._helper = name
         self.kubectl(
-            "wait", "--for=condition=Ready", f"pod/{name}", f"--timeout={HELPER_TIMEOUT_S}s",
+            "wait",
+            "--for=condition=Ready",
+            f"pod/{name}",
+            f"--timeout={HELPER_TIMEOUT_S}s",
             timeout=HELPER_TIMEOUT_S + 30,
-        )  # fmt: skip
+        )
         # Spark's pods run as the image's user (185 in the official image).
         self.exec(f"mkdir -p {MOUNT}/data {MOUNT}/runs && chmod 777 {MOUNT}/data {MOUNT}/runs")
         return name
@@ -314,7 +324,7 @@ class K8sRunner:
         self, dataset: DatasetManifest, driver: DriverPackage, image: str
     ) -> tuple[list[str], str]:
         """Copy the dataset into the volume once; later runs reuse it (marker with checksum)."""
-        self.helper(image)
+        self.helper(self.images.get(image, image))
         remote = f"{MOUNT}/data/{dataset.dataset_id}"
         marker = json.dumps({"checksum": dataset.checksum})
         current = self.exec(f"cat {remote}/{STAGED_MARKER} 2>/dev/null || true").strip()
@@ -335,6 +345,8 @@ class K8sRunner:
         return problems, ""
 
     def run(self, app: AppSpec) -> AppResult:
+        if app.image in self.images:
+            app = dataclasses.replace(app, image=self.images[app.image])
         self.helper(app.image)
         work_dir = Path(tempfile.mkdtemp(prefix=f"velocia-{app.run_id}-"))
         (work_dir / "eventlog").mkdir()
