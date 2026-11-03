@@ -129,4 +129,6 @@ jobs:
           tests/test_e2e_local.py::test_interrupt_leaves_no_containers
           tests/test_engines.py
       - name: Event-log reader benchmark (1 GB)
-        run: uv run pytest -m slow -s
+        run: uv run pytest -m "slow and not docker" -s
+      - name: External runner on S3 storage (T42)
+        run: uv run pytest -m "docker and slow" tests/test_external_s3.py
