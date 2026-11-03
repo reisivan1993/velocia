@@ -209,8 +209,9 @@ def test_estimate_without_known_units() -> None:
     raw = experiment.model_dump()
     raw["workload"] = {**raw["workload"], "units": "all"}
     assert estimate(Experiment.model_validate(raw), expand(experiment)).units == 1  # terasort
-    raw["workload"] = {**raw["workload"], "kind": "sql", "suite": "tpcds", "rows": None}
-    raw["workload"]["scale_factor"] = 1  # tpcds has no queries yet
+    raw["workload"] = {**raw["workload"], "kind": "sql", "suite": "custom", "rows": None}
+    raw["workload"]["sql_dir"] = "queries"  # user SQL: unknown until read
+    raw["workload"]["scale_factor"] = 1
     est = estimate(Experiment.model_validate(raw), expand(experiment))
     assert est.units is None and est.duration is None and est.worst_case is None
 

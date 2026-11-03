@@ -1,5 +1,9 @@
 # Spec changelog
 
+## 2026-11-03 — TPC-DS-derived queries
+
+- Workload `tpcds`: 99 queries `q1`..`q99` generated from DuckDB's `tpcds_queries()` like the TPC-H ones; DuckDB's double-quoted column aliases become backticks for Apache Spark. All 99 run on Apache Spark 3.5.9 and match DuckDB row for row at SF0.1 (with Spark's null ordering); 18 return no rows at that scale. Data: `velocia datagen --suite tpcds --sf N` (SF1-SF10 through DuckDB's dsdgen).
+
 ## 2026-11-03 — jar jobs (T32, rest)
 
 - Bring-your-own jobs may be a `.jar`: `entrypoint` is the main class, new field `job.args` (with `${table:<name>}` replaced by the table's path). Velocia passes `spark.velocia.run_id` and `spark.velocia.rep`; units tagged `velocia:<run_id>:<unit>:<rep>` are timed from their first job's submission to their last job's completion in the event log, an untagged application is one opaque unit `app` timed from application start to end. Jar jobs: cold mode only, no validator, correctness `not_checked`; no correctness pass is run.

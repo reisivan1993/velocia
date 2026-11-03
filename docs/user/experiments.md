@@ -7,7 +7,7 @@ checked before anything runs, and errors name the field (for example `engines[1]
 name: tpch-aqe                     # results are stored under <name>-<timestamp>
 workload:
   kind: sql                        # sql or job
-  suite: tpch                      # tpch (22 queries), tera (TeraSort) or text
+  suite: tpch                      # tpch (22 queries), tpcds (99), tera, text, etl, ...
   units: all                       # or a list: [q1, q6]
   scale_factor: 1                  # tpch; generate first: velocia datagen --suite tpch --sf 1
   format: parquet-zstd             # or parquet-snappy

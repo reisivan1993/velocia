@@ -35,3 +35,4 @@ class SqlWorkload:
 
 
 TPCH = SqlWorkload(Suite.tpch, "derived from TPC-H", QUERIES_DIR / "tpch")
+TPCDS = SqlWorkload(Suite.tpcds, "derived from TPC-DS", QUERIES_DIR / "tpcds")

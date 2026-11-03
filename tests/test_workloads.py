@@ -18,8 +18,8 @@ from velocia.datagen.duckdb_tpc import generate
 from velocia.engines.registry import get_engine
 from velocia.runners.local import linux_user
 from velocia.workloads import UnknownUnitError, get_workload, select_units
-from velocia.workloads.sql import QUERIES_DIR, TPCH
-from velocia.workloads.sql.generate import tpch_queries
+from velocia.workloads.sql import QUERIES_DIR, TPCDS, TPCH
+from velocia.workloads.sql.generate import queries
 
 VALID = Path(__file__).parent / "fixtures" / "config" / "valid"
 
@@ -33,10 +33,18 @@ def test_tpch_has_22_sql_units_in_natural_order() -> None:
     assert TPCH.label == "derived from TPC-H"
 
 
-def test_committed_queries_match_the_generator() -> None:
-    expected = tpch_queries()
-    committed = {p.name: p.read_text() for p in (QUERIES_DIR / "tpch").glob("*.sql")}
+@pytest.mark.parametrize("suite", ["tpch", "tpcds"])
+def test_committed_queries_match_the_generator(suite: str) -> None:
+    expected = queries(suite)
+    committed = {p.name: p.read_text() for p in (QUERIES_DIR / suite).glob("*.sql")}
     assert committed == expected, "run: uv run python -m velocia.workloads.sql.generate"
+
+
+def test_tpcds_has_99_units_with_spark_identifiers() -> None:
+    units = TPCDS.units()
+    assert [u.id for u in units] == [f"q{i}" for i in range(1, 100)]
+    assert get_workload(Suite.tpcds) is TPCDS and TPCDS.label == "derived from TPC-DS"
+    assert all('"' not in (u.sql or "") for u in units)  # aliases use backticks
 
 
 def test_select_units() -> None:
@@ -89,16 +97,22 @@ def _same(spark_value: str | None, duck_value: Any) -> bool:
 
 @pytest.mark.docker
 @pytest.mark.skipif(shutil.which("docker") is None, reason="docker not available")
-def test_all_22_queries_on_spark_match_duckdb(tmp_path: Path) -> None:
-    manifest, _ = generate(Suite.tpch, 0.1, DataFormat.parquet_zstd, tmp_path / "data")
+@pytest.mark.parametrize("suite", [Suite.tpch, Suite.tpcds])
+def test_every_query_on_spark_matches_duckdb(tmp_path: Path, suite: Suite) -> None:
+    """All 22 TPC-H- and 99 TPC-DS-derived queries at SF0.1, row by row against DuckDB."""
+    manifest, _ = generate(suite, 0.1, DataFormat.parquet_zstd, tmp_path / "data")
     data = Path(manifest.location)
-    units = TPCH.units()
+    units = (TPCH if suite is Suite.tpch else TPCDS).units()
 
     with duckdb.connect() as con:
+        con.execute("SET default_null_order = 'nulls_first'")  # Apache Spark's ascending order
         for table in manifest.tables:
-            path = data / table.files[0].path  # under tmp_path; no quotes in it
-            con.execute(f"CREATE VIEW {table.name} AS SELECT * FROM read_parquet('{path}')")
-        expected = {u.id: con.execute(u.sql or "").fetchall() for u in units}
+            path = data / table.name  # under tmp_path; no quotes in it
+            con.execute(
+                f"CREATE VIEW {table.name} AS SELECT * FROM read_parquet('{path}/*.parquet')"
+            )
+        # Backtick identifiers are Spark's; DuckDB wants double quotes.
+        expected = {u.id: con.execute((u.sql or "").replace("`", '"')).fetchall() for u in units}
 
     work = tmp_path / "work"
     work.mkdir()
@@ -129,7 +143,8 @@ def test_all_22_queries_on_spark_match_duckdb(tmp_path: Path) -> None:
 
     for unit in units:
         spark_rows, duck_rows = actual[unit.id], expected[unit.id]
-        assert duck_rows, f"{unit.id} returns no rows at SF0.1; the check would be empty"
+        if suite is Suite.tpch:  # several TPC-DS queries legitimately return nothing at SF0.1
+            assert duck_rows, f"{unit.id} returns no rows at SF0.1; the check would be empty"
         assert len(spark_rows) == len(duck_rows), unit.id
         for i, (s_row, d_row) in enumerate(zip(spark_rows, duck_rows, strict=True)):
             assert all(_same(s, d) for s, d in zip(s_row, d_row, strict=True)), (
