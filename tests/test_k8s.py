@@ -54,7 +54,8 @@ def test_k8s_matches_local(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
         manifest = json.loads((run / "manifest.json").read_text())
         assert manifest["status"] == "finished", (run.name, (run / "driver.log").read_text())
         assert manifest["hardware"]["node_types"][0]["source"] == "kubernetes"
-        assert manifest["mode_label"] in ("cold (cache not dropped)", "check")
+        expected = "cold" if manifest["task"] == "check" else "cold (cache not dropped)"
+        assert manifest["mode_label"] == expected
         assert list((run / "eventlog").iterdir()), "event log copied out of the volume"
     report_dir = next((results / "reports").glob("on-k8s-*"))
     report = json.loads((report_dir / "report.json").read_text())
