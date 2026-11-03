@@ -118,14 +118,49 @@ def docker_command(app: AppSpec, cluster: LocalCluster, work_dir: Path) -> list[
     ]
     for key, value in sorted(conf.items()):
         cmd += ["--conf", f"{key}={value}"]
-    cmd += [
-        "--py-files",
-        py_files(app, DRIVER_MOUNT, CUSTOM_MOUNT),
-        f"{DRIVER_MOUNT}/{app.driver.launcher_path.name}",
-        "--spec",
-        f"{WORK_MOUNT}/run.json",
+    return cmd + program(app, DRIVER_MOUNT, CUSTOM_MOUNT, WORK_MOUNT, DATA_MOUNT)
+
+
+def is_jar(app: AppSpec) -> bool:
+    return bool(app.custom) and str(app.custom["artifact"]).endswith(".jar")  # type: ignore[index]
+
+
+def program(
+    app: AppSpec, driver_dir: str, custom_dir: str | None, work_root: str, data_root: str
+) -> list[str]:
+    """The end of ``spark-submit``: Velocia's driver, or a jar job's main class.
+
+    A jar job gets its run ID and repetition as Spark settings, so it can tag units itself
+    (job description ``velocia:<run_id>:<unit>:<rep>``); ``${table:<name>}`` in its arguments
+    becomes that table's path.
+    """
+    if not is_jar(app):
+        return [
+            "--py-files",
+            py_files(app, driver_dir, custom_dir),
+            f"{driver_dir}/{app.driver.launcher_path.name}",
+            "--spec",
+            f"{work_root}/run.json",
+        ]
+    assert app.custom is not None
+    artifact = Path(str(app.custom["artifact"]))
+    jar = f"{custom_dir}/{artifact.name}" if custom_dir else str(artifact.resolve())
+    args = json.loads(str(app.custom.get("args") or "[]"))
+    tables = {t: f"{data_root}/{t}" for t in app.tables}
+    resolved = [
+        re.sub(r"\$\{table:([A-Za-z0-9_]+)\}", lambda m: tables.get(m.group(1), m.group(0)), a)
+        for a in args
     ]
-    return cmd
+    return [
+        "--conf",
+        f"spark.velocia.run_id={app.run_id}",
+        "--conf",
+        f"spark.velocia.rep={app.reps[0] if app.reps else -1}",
+        "--class",
+        str(app.custom["entrypoint"]),
+        jar,
+        *resolved,
+    ]
 
 
 def custom_mount(app: AppSpec) -> list[str]:

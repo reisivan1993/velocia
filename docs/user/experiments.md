@@ -87,8 +87,21 @@ tags and times one unit (`import velocia` works inside a run; outside one, the h
 nothing). A job that doesn't use the helper is one opaque unit named `app`, timed around the
 call. The optional validator `validate(spark, tables, scratch)` returns, per unit (or once for
 the whole job), `{"rows": ..., "checksum": ..., "problem": None}`, compared with the
-reference engine's; without one, correctness is "not checked". Jar artifacts are not supported
-yet.
+reference engine's; without one, correctness is "not checked".
+
+A compiled job (Scala or Java) works too:
+
+```yaml
+  job: {artifact: jobs/my-job.jar, entrypoint: com.example.MyJob,
+        args: ["${table:lineitem}", "--out", "/tmp/out"]}
+```
+
+Velocia submits it with `--class`; `${table:<name>}` in `args` becomes that table's path. A
+jar job that sets its job description to `velocia:<run_id>:<unit>:<rep>` (both values are given
+to it as the Spark settings `spark.velocia.run_id` and `spark.velocia.rep`) is timed per unit,
+from its first job's start to its last job's end in the event log; otherwise the whole
+application is one unit `app`. Jar jobs run in cold mode only (each repetition is one
+application) and are not checked for correctness.
 
 Jobs use the DataFrame API, so engines that replace Spark's operators (Comet, Gluten, hardware
 accelerators) are measured on them.

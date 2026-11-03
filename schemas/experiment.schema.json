@@ -15,6 +15,14 @@
     "CustomJob": {
       "additionalProperties": false,
       "properties": {
+        "args": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Args",
+          "type": "array"
+        },
         "artifact": {
           "title": "Artifact",
           "type": "string"

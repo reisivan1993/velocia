@@ -1,5 +1,10 @@
 # Spec changelog
 
+## 2026-11-03 — jar jobs (T32, rest)
+
+- Bring-your-own jobs may be a `.jar`: `entrypoint` is the main class, new field `job.args` (with `${table:<name>}` replaced by the table's path). Velocia passes `spark.velocia.run_id` and `spark.velocia.rep`; units tagged `velocia:<run_id>:<unit>:<rep>` are timed from their first job's submission to their last job's completion in the event log, an untagged application is one opaque unit `app` timed from application start to end. Jar jobs: cold mode only, no validator, correctness `not_checked`; no correctness pass is run.
+- Event-log summaries gain `first_job_ms` and `last_job_end_ms`. No Scala helper library is shipped: tagging is one `setJobDescription` call.
+
 ## 2026-11-03 — external runner on S3 (T42)
 
 - Nightly test: the external runner against a standalone cluster with S3 storage (`s3a`, SeaweedFS's S3 gateway; MinIO no longer publishes container images), `hadoop-aws` fetched with `--packages`. It found two problems, both fixed: s3a's `copyFromLocalFile` fails on single files ("Cannot get relative path"), so dataset upload and event-log download now stream through Hadoop's `FileUtil.copy`; and the Spark image's user has no writable home, so the external runner sets `spark.jars.ivy=/tmp/ivy2` when submitting from Docker (overridable).

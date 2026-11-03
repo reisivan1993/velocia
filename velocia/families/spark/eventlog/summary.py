@@ -67,7 +67,16 @@ class UnitSummary:
     plan_transitions: int = 0
     plan_accelerated: int = 0
     fallback_task_ms: int = 0  # task run time in stages without accelerated operators
+    first_job_ms: int | None = None  # first job submitted (epoch ms)
+    last_job_end_ms: int | None = None  # last job completed (epoch ms)
     wall_ms: int | None = None  # opaque mode only: application start to end
+
+    @property
+    def span_ms(self) -> int | None:
+        """First job start to last job end: the unit's wall time when only the log has it."""
+        if self.first_job_ms is None or self.last_job_end_ms is None:
+            return None
+        return self.last_job_end_ms - self.first_job_ms
 
     def telemetry(self) -> dict[str, float]:
         """Inputs for measures (docs/03-spec.md §6, ``unit.*``)."""
@@ -200,7 +209,13 @@ def summarize_events(
             if key is None:
                 continue
             job_unit[event["Job ID"]] = key
-            unit_for(key).jobs += 1
+            unit = unit_for(key)
+            unit.jobs += 1
+            submitted = event.get("Submission Time")
+            if submitted is not None and (
+                unit.first_job_ms is None or submitted < unit.first_job_ms
+            ):
+                unit.first_job_ms = submitted
             for stage_id in event.get("Stage IDs", []):
                 stage_unit[stage_id] = key
         elif kind == "SparkListenerStageCompleted":
@@ -209,7 +224,11 @@ def summarize_events(
             if key is not None and "Completion Time" in info:
                 unit_for(key).stages += 1
         elif kind == "SparkListenerJobEnd":
-            job_unit.pop(event.get("Job ID", -1), None)
+            key = job_unit.pop(event.get("Job ID", -1), None)
+            completed = event.get("Completion Time")
+            if key is not None and completed is not None:
+                unit = unit_for(key)
+                unit.last_job_end_ms = max(unit.last_job_end_ms or completed, completed)
         elif kind.endswith("SQLExecutionStart"):
             tag = parse_tag(event.get("description"))
             root = event.get("rootExecutionId", event["executionId"])

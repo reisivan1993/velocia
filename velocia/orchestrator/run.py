@@ -53,7 +53,7 @@ from velocia.measures.plugins import PluginError
 from velocia.measures.registry import load_measures
 from velocia.runners.base import AppResult, AppSpec
 from velocia.runners.external import ExternalRunner, declared_hardware
-from velocia.runners.local import LocalRunner, container_memory_mb, keep_awake
+from velocia.runners.local import LocalRunner, container_memory_mb, is_jar, keep_awake
 from velocia.stats.summary import ratio_ci, summarize
 from velocia.store.catalog import Catalog, as_json
 from velocia.workloads import Unit, UnknownUnitError, get_workload, select_units
@@ -240,15 +240,20 @@ MEMORY_HEADROOM = 0.85  # of Docker's memory; the rest is for the VM and other c
 def _custom_job(path: Path, experiment: Experiment) -> tuple[list[Unit], dict[str, str | None]]:
     """A bring-your-own Python job: its declared units (or one opaque unit) and artifact.
 
-    The artifact path is relative to the experiment file. Jar artifacts are not supported yet.
+    The artifact path is relative to the experiment file.
     """
     job = experiment.workload.job
     assert job is not None
     artifact = (path.parent / job.artifact).resolve()
     if not artifact.is_file():
         raise RunError(f"workload.job.artifact: {artifact} not found")
-    if artifact.suffix not in (".py", ".zip"):
-        raise RunError("workload.job.artifact: only Python jobs (.py or .zip) are supported so far")
+    if artifact.suffix not in (".py", ".zip", ".jar"):
+        raise RunError("workload.job.artifact: a .py or .zip (Python) or a .jar")
+    if artifact.suffix == ".jar":
+        if job.validator:
+            raise RunError("workload.job.validator: only Python jobs take a validator")
+        if any(m is not Mode.cold for m in experiment.modes):
+            raise RunError("jar jobs run in cold mode only: each repetition is one application")
     wanted = experiment.workload.units
     ids = [OPAQUE_UNIT] if wanted == "all" else list(wanted)
     units = [Unit(id=i, kind=WorkloadKind.job, job="custom") for i in ids]
@@ -256,7 +261,12 @@ def _custom_job(path: Path, experiment: Experiment) -> tuple[list[Unit], dict[st
         "artifact": str(artifact),
         "entrypoint": job.entrypoint,
         "validator": job.validator,
+        "args": json.dumps(job.args),
     }
+
+
+def is_jar_artifact(custom_job: dict[str, str | None]) -> bool:
+    return str(custom_job.get("artifact") or "").endswith(".jar")
 
 
 def _load_dataset(results_dir: Path, ds_id: str, how: str) -> DatasetManifest:
@@ -538,7 +548,8 @@ class Orchestrator:
             apps += [(f"{base}-r{rep}", "time", [rep], False) for rep in reps]
         else:
             apps.append((f"{base}-warm", "time", reps, True))
-        apps.append((f"{base}-check", "check", [], False))
+        if not (self.p.custom_job and is_jar_artifact(self.p.custom_job)):
+            apps.append((f"{base}-check", "check", [], False))  # jar jobs: not checked
 
         conf = {**engine.definition.spark_conf, **cell.config.spark_conf}
         image = inspect_image(engine.definition.image)
@@ -721,7 +732,10 @@ class Orchestrator:
     ) -> None:
         reported = output.get("units", [])
         if app.task == "time":
-            summaries = self._summaries(run_dir)
+            if is_jar(app):
+                reported, summaries = self._jar_units(app, result, run_dir)
+            else:
+                summaries = self._summaries(run_dir)
             rows = [
                 {
                     "run_id": app.run_id,
@@ -781,6 +795,47 @@ class Orchestrator:
                     for unit in app.units
                 ],
             )
+
+    def _jar_units(
+        self, app: AppSpec, result: AppResult, run_dir: Path
+    ) -> tuple[list[dict[str, Any]], dict[tuple[str, int], UnitSummary]]:
+        """A jar job's units from its event log: tagged units span their first job's start to
+        their last job's end; an untagged job is one opaque unit, application start to end."""
+        rep = app.reps[0]
+        ids = [str(u["id"]) for u in app.units]
+        opaque = ids == [OPAQUE_UNIT]
+        log_dir = run_dir / "eventlog"
+        found: dict[tuple[str, int], UnitSummary] = {}
+        if log_dir.is_dir():
+            try:
+                found = summarize_log(log_dir, opaque_unit=OPAQUE_UNIT if opaque else None).units
+            except EventLogError as exc:
+                self.echo(f"warning: {run_dir.name}: event log unreadable: {exc}")
+        units, summaries = [], {}
+        for unit_id in ids:
+            summary = found.get((unit_id, 1 if opaque else rep))
+            wall = (summary.wall_ms if opaque else summary.span_ms) if summary else None
+            status: str
+            error: str | None
+            if result.status != "finished":
+                status, error = result.status, f"application {result.status}"
+            elif wall is None:
+                status, error = "failed", "no jobs tagged for this unit in the event log"
+            else:
+                status, error = "ok", None
+            units.append(
+                {
+                    "unit_id": unit_id,
+                    "rep": rep,
+                    "wall_ms": wall if status == "ok" else None,
+                    "status": status,
+                    "discarded": False,
+                    "error": error,
+                }
+            )
+            if summary is not None:
+                summaries[(unit_id, rep)] = summary
+        return units, summaries
 
     def _summaries(self, run_dir: Path) -> dict[tuple[str, int], UnitSummary]:
         """Per-unit event-log summaries of a run; empty when its log is missing or unreadable."""

@@ -160,9 +160,10 @@ class DataFormat(StrEnum):
 
 
 class CustomJob(StrictModel):
-    artifact: str
-    entrypoint: str
-    validator: str | None = None
+    artifact: str  # .py or .zip (Python), or .jar
+    entrypoint: str  # module:function (Python) or the main class (jar)
+    validator: str | None = None  # Python jobs only
+    args: list[str] = []  # jar jobs: program arguments; ${table:<name>} is that table's path
 
 
 class KeyDistribution(StrEnum):

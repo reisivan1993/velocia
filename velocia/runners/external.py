@@ -42,7 +42,7 @@ from velocia.runners.local import (
     driver_spec,
     host_slept_s,
     linux_user,
-    py_files,
+    program,
     run_process,
 )
 
@@ -215,11 +215,13 @@ class ExternalRunner:
         return [
             *cmd,
             *cluster.submit_args,
-            "--py-files",
-            py_files(app, driver_dir, CUSTOM_MOUNT if self.in_docker else None),
-            f"{driver_dir}/{app.driver.launcher_path.name}",
-            "--spec",
-            f"{work}/run.json",
+            *program(
+                app,
+                driver_dir,
+                CUSTOM_MOUNT if self.in_docker else None,
+                work,
+                uri(cluster.data_uri, app.dataset_id),
+            ),
         ]
 
     def run_spec(self, app: AppSpec, work_dir: Path) -> dict[str, object]:
