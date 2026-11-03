@@ -20,11 +20,16 @@ jobs:
   checks:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]  # every supported CLI Python (the driver: 3.10)
+    name: checks (python ${{ matrix.python }})
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python }}
       - run: uv sync --locked
       - run: uv run ruff check .
       - run: uv run ruff format --check .

@@ -45,3 +45,17 @@ This runs TPC-H-derived q1, q3, q6 at scale factor 0.01 and a 100,000-row TeraSo
 
 Hardware accelerators that run on their own servers (for example an APU appliance exposing the
 regular Spark API) use the `external` runner: see [External clusters](external.md).
+
+## Compatibility
+
+What CI tests on every push (and nightly), so what is known to work:
+
+| | Tested | Notes |
+| --- | --- | --- |
+| Velocia (CLI) | Python 3.11, 3.12, 3.13 | the driver program runs on the engine image's Python 3.10 |
+| Apache Spark | 3.5.9 | engines declare `spark_versions`; 3.5 only so far |
+| `spark-vanilla` | linux/amd64 (CI), linux/arm64 (Apple silicon) | |
+| `spark-comet` (Comet 1.1.0) | linux/amd64 (CI), linux/arm64 (Apple silicon) | |
+| `spark-gluten` (Gluten 1.7.0) | linux/amd64 (CI) | no arm64 build |
+| `local` runner | Docker on Linux and macOS | page cache dropped on Linux only |
+| `external` runner | Spark standalone; `file://` and S3 (`s3a`) storage | YARN and Kubernetes masters untested |

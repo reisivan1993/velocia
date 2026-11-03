@@ -1,5 +1,9 @@
 # Spec changelog
 
+## 2026-11-03 — compatibility (T57 part)
+
+- CI runs the lint, type and unit checks on Python 3.11, 3.12 and 3.13; the package lists them. The user docs gain a compatibility table of what CI tests (Spark 3.5.9; engines per platform; runners and storage). A Spark-version axis follows when an engine supports more than 3.5.
+
 ## 2026-11-03 — reference docs, remaining CLI commands, bring-your-own SQL (T59 part)
 
 - `velocia workloads list|show <suite>` and `velocia hardware probe [--cluster NAME --experiment FILE]` implemented (`--experiment` added: clusters are defined in experiment files). No CLI command is a stub any more.
