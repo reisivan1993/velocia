@@ -70,6 +70,7 @@
 | ADR-8 | Apache-2.0 | Matches Spark, Gluten, Comet; patent grant | MIT; AGPL |
 | ADR-9 | "Unit of work" (query or job step) replaces "query" everywhere | One pipeline for SQL and general jobs | Separate job harness |
 | ADR-10 | Engine family layer above engines; only `spark` until v1.0 | Lets other engines plug in later without reshaping results or bundles | Spark-only interfaces; building several families now |
+| ADR-11 (proposed) | First cloud runner: AWS EKS + S3, provisioning then reusing the `k8s` runner; see [adr-11-cloud-provider.md](adr-11-cloud-provider.md) | Reuses the tested `k8s` and S3 paths; same cloud as Speedata's announced AWS service | GKE, AKS, managed Spark services, Nebul |
 | ADR-11 | Measures are pure offline functions declared in YAML or plugins | Supports vendor-defined units while keeping the independence invariant and reproducibility | Calling vendor tools or APIs to compute units |
 | ADR-12 | RDD jobs in Scala, DataFrame jobs in PySpark | Avoids measuring Python worker overhead instead of the engine | All jobs in PySpark |
 | ADR-13 | Cross-hardware comparison only with explicit `allow_cross_hardware` and a normalized measure | The user override CLAUDE.md allows, made visible and hard to misuse | Forbidding it (blocks accelerator evaluation); allowing it silently |
