@@ -70,3 +70,32 @@ on-demand nodes at about $0.77/h each, plus the control plane, is about $6.3/h; 
   (`pip install velocia[aws]`): Velocia's core keeps no cloud dependency.
 - CI cannot run the acceptance test; a nightly job with a small cap could, with a CI-only
   account (owner's call).
+
+## Design (as built)
+
+The `aws` runner provisions and tears down; the tested `k8s` runner executes. Provisioning uses
+the standard command-line tools, like `docker` and `kubectl` elsewhere in Velocia, so Velocia
+keeps no cloud SDK dependency:
+
+| Step | Tool | Torn down by |
+| --- | --- | --- |
+| Cluster, VPC, node group (on-demand or spot), tagged `velocia:run=<id>` | `eksctl create cluster` | `eksctl delete cluster` |
+| EFS CSI driver add-on | `eksctl create addon` | the cluster |
+| EFS file system and mount targets (shared `/velocia` volume) | `aws efs` | `aws efs delete-*` |
+| ECR repositories for the engine images; push | `aws ecr`, `docker push` | `aws ecr delete-repository` |
+| Spark Operator | `helm install` | the cluster |
+| StorageClass and the `velocia` volume claim | `kubectl apply` | the cluster |
+
+The steps are data (a plan of commands), so `velocia run --dry-run` shows every command and the
+cost estimate without touching AWS, and the tests run them against fake `eksctl`, `aws`,
+`helm`, `kubectl` and `docker` executables that record calls.
+
+**Budget:** the cluster states `node_hour_usd` (from the AWS price list; no stale built-in
+table) and `budget_usd`. Before anything is created, the estimate (nodes x node price plus the
+control plane, over the provisioning time plus the experiment's estimated duration) must be
+below the cap, or the run refuses to start. During the run a watchdog charges elapsed time at
+the same hourly rate from the moment provisioning starts; at the cap it stops the run, marks it
+"stopped: budget cap reached", and tears down.
+
+**Teardown:** always in a `finally` path, in reverse order, continuing past errors and listing
+what could not be deleted; `velocia teardown` finds leftovers by their `velocia:run` tag.
