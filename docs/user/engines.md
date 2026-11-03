@@ -58,4 +58,5 @@ What CI tests on every push (and nightly), so what is known to work:
 | `spark-comet` (Comet 1.1.0) | linux/amd64 (CI), linux/arm64 (Apple silicon) | |
 | `spark-gluten` (Gluten 1.7.0) | linux/amd64 (CI) | no arm64 build |
 | `local` runner | Docker on Linux and macOS | page cache dropped on Linux only |
+| `k8s` runner | kind + Spark Operator 2.5.2 (nightly) | one volume claim for data and outputs |
 | `external` runner | Spark standalone; `file://` and S3 (`s3a`) storage | YARN and Kubernetes masters untested |

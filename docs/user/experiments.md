@@ -145,9 +145,9 @@ the same fields.
 
 `runner: local` runs each Spark application in its own Docker container on this machine, in
 Spark's local mode with `executors x executor_cores` cores and all executor memory for the driver.
+`runner: k8s` runs on Kubernetes through the Spark Operator: see [Kubernetes](kubernetes.md).
 `runner: external` submits to an existing cluster, for example a vendor's accelerator servers:
-see [External clusters](external.md). Kubernetes (`k8s`) is planned; its fields are already in
-the schema.
+see [External clusters](external.md).
 
 Several clusters, with engines pinned to them:
 

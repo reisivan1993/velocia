@@ -1,5 +1,11 @@
 # Spec changelog
 
+## 2026-11-03 — Kubernetes runner (T20)
+
+- `runner: k8s` works: one Spark Operator `SparkApplication` (`sparkoperator.k8s.io/v1beta2`, cluster mode) per run. New cluster fields `volume_claim` (default `velocia`: a PVC mounted at `/velocia` in every pod, holding datasets, run inputs, outputs and event logs), `service_account` (default `spark`) and `context`. `resources` maps to one device type per executor (the operator's executor resource limit).
+- Velocia reaches the volume through a helper pod it starts and deletes per run (`kubectl cp`); datasets are copied once and marked with their checksum. Hardware in manifests comes from the Kubernetes API (`source: kubernetes`) for the nodes matching `node_selector`, plus the profile.
+- CI workflow `k8s.yml` (nightly and on demand): kind + Spark Operator 2.5.2; the same experiment on Kubernetes and on the local runner must produce the same checksums. The `k8s` runner's page-cache drop (03 §5, privileged init container) is not done: cold runs are labeled "cold (cache not dropped)".
+
 ## 2026-11-03 — compatibility (T57 part)
 
 - CI runs the lint, type and unit checks on Python 3.11, 3.12 and 3.13; the package lists them. The user docs gain a compatibility table of what CI tests (Spark 3.5.9; engines per platform; runners and storage). A Spark-version axis follows when an engine supports more than 3.5.
