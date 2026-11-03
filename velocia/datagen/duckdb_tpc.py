@@ -126,7 +126,7 @@ def _generate_tables(
     try:
         with duckdb.connect(db_file) as con:
             con.execute("SET autoinstall_known_extensions = false")
-            _load_extension(con, generator.extension, progress)
+            load_extension(con, generator.extension, progress)
             progress(f"Generating data ({generator.label}) at scale factor {scale:g}")
             con.execute(f"CALL {generator.procedure}(sf = ?)", [scale])
             names = [row[0] for row in con.execute("SHOW TABLES").fetchall()]
@@ -136,9 +136,12 @@ def _generate_tables(
         db_file.with_suffix(".duckdb.wal").unlink(missing_ok=True)
 
 
-def _load_extension(
-    con: duckdb.DuckDBPyConnection, extension: str, progress: Callable[[str], None]
+def load_extension(
+    con: duckdb.DuckDBPyConnection,
+    extension: str,
+    progress: Callable[[str], None] = lambda _: None,
 ) -> None:
+    """Load a DuckDB extension, downloading it once if it isn't installed."""
     try:
         con.execute(f"LOAD {extension}")
     except duckdb.Error:

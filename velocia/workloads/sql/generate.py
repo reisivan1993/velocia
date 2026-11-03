@@ -14,6 +14,7 @@ from pathlib import Path
 
 import duckdb
 
+from velocia.datagen.duckdb_tpc import load_extension
 from velocia.workloads.sql import QUERIES_DIR
 
 HEADER = (
@@ -28,7 +29,7 @@ def queries(suite: str) -> dict[str, str]:
     benchmark = {"tpch": "TPC-H", "tpcds": "TPC-DS"}[suite]
     with duckdb.connect() as con:
         con.execute("SET autoinstall_known_extensions = false")
-        con.execute(f"LOAD {suite}")
+        load_extension(con, suite)
         rows = con.execute(f"SELECT query_nr, query FROM {suite}_queries() ORDER BY 1").fetchall()
     out = {}
     for nr, query in rows:
