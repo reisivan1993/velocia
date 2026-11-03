@@ -1,6 +1,8 @@
-# ADR-11 (proposed): the first cloud runner
+# ADR-11: the first cloud runner is AWS (EKS + S3)
 
-Status: **proposed, waiting for the owner's decision** (plan T50). Date: 2026-11-03.
+Status: **accepted** by the owner on 2026-11-03 (plan T50): option A. The runner is built and
+tested without creating real AWS resources first; the owner is asked again before the first
+real run.
 
 ## Context
 
