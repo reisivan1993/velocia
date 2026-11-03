@@ -459,3 +459,18 @@ def test_run_process_keeps_the_root_cause() -> None:
     assert code == 3 and not timed_out
     assert log.startswith("first errors:\nException in thread main: boom\nCaused by: root\n")
     assert log.endswith("    at frame 60")
+
+
+def test_price_table_overrides_the_profile_price() -> None:
+    from velocia.orchestrator.run import _priced
+
+    profile = HardwareProfile(name="apu-node", price_per_node_hour_usd=4.0)
+    assert _priced(profile, {"apu-node": 2.5}).price_per_node_hour_usd == 2.5  # type: ignore[union-attr]
+    assert _priced(profile, {"other": 9.0}) is profile
+    assert _priced(profile, None) is profile
+    assert _priced(None, {"apu-node": 1.0}) is None
+    cost = BUILTINS["cost_usd"].compute(
+        UnitInputs(wall_s=3600.0),
+        ClusterInputs.of(CLUSTER, _priced(profile, {"apu-node": 2.5}), 0.4),
+    )
+    assert cost == (2.5, None)

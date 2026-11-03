@@ -5,6 +5,7 @@
       "properties": {
         "float_round_decimals": {
           "default": 4,
+          "description": "Floating and decimal columns are rounded to this many decimals before checksums.",
           "maximum": 18,
           "minimum": 0,
           "title": "Float Round Decimals",
@@ -19,6 +20,7 @@
       "properties": {
         "default_node_hour_usd": {
           "default": 0.4,
+          "description": "USD per node-hour when the hardware profile sets no price.",
           "minimum": 0,
           "title": "Default Node Hour Usd",
           "type": "number"
@@ -32,6 +34,7 @@
       "properties": {
         "max_cpu_pct": {
           "default": 10,
+          "description": "Host CPU busy above this share (%) flags the run.",
           "maximum": 100,
           "minimum": 0,
           "title": "Max Cpu Pct",
@@ -39,6 +42,7 @@
         },
         "max_other_spark_apps": {
           "default": 0,
+          "description": "Other Spark applications allowed on the cluster.",
           "minimum": 0,
           "title": "Max Other Spark Apps",
           "type": "integer"
@@ -53,6 +57,7 @@
       "properties": {
         "key_patterns": {
           "default": [],
+          "description": "Shell-style globs of setting names to redact, on top of the built-in list.",
           "items": {
             "minLength": 1,
             "type": "string"
@@ -69,12 +74,14 @@
       "properties": {
         "bootstrap_resamples": {
           "default": 10000,
+          "description": "Resamples for the 95% confidence intervals.",
           "minimum": 1000,
           "title": "Bootstrap Resamples",
           "type": "integer"
         },
         "cv_flag_threshold": {
           "default": 0.1,
+          "description": "Cells whose coefficient of variation exceeds this are flagged.",
           "exclusiveMaximum": 1,
           "exclusiveMinimum": 0,
           "title": "Cv Flag Threshold",
@@ -94,20 +101,24 @@
       "$ref": "#/$defs/Correctness",
       "default": {
         "float_round_decimals": 4
-      }
+      },
+      "description": "How results are compared with the reference engine."
     },
     "engines_dir": {
       "default": "./engines",
+      "description": "Your engine definitions; a file named like a built-in engine replaces it.",
       "title": "Engines Dir",
       "type": "string"
     },
     "hardware_dir": {
       "default": "./hardware",
+      "description": "Hardware profiles (`<name>.yaml`) referenced by clusters.",
       "title": "Hardware Dir",
       "type": "string"
     },
     "measures_dir": {
       "default": "./measures",
+      "description": "Your formula measures (`<name>.yaml`).",
       "title": "Measures Dir",
       "type": "string"
     },
@@ -115,23 +126,27 @@
       "$ref": "#/$defs/Pricing",
       "default": {
         "default_node_hour_usd": 0.4
-      }
+      },
+      "description": "Prices used by `cost_usd` when a hardware profile has none."
     },
     "quiet_check": {
       "$ref": "#/$defs/QuietCheck",
       "default": {
         "max_cpu_pct": 10.0,
         "max_other_spark_apps": 0
-      }
+      },
+      "description": "What counts as a quiet machine before each run."
     },
     "redaction": {
       "$ref": "#/$defs/Redaction",
       "default": {
         "key_patterns": []
-      }
+      },
+      "description": "Extra secrets to redact."
     },
     "results_dir": {
       "default": "./velocia-results",
+      "description": "Where datasets, runs, reports, bundles and the catalog go.",
       "title": "Results Dir",
       "type": "string"
     },
@@ -140,7 +155,8 @@
       "default": {
         "bootstrap_resamples": 10000,
         "cv_flag_threshold": 0.1
-      }
+      },
+      "description": "Bootstrap and variation settings."
     }
   },
   "title": "VelociaConfig",

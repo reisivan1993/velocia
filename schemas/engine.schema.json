@@ -6,17 +6,20 @@
   "properties": {
     "family": {
       "default": "spark",
+      "description": "Engine family (only `spark`).",
       "maxLength": 64,
       "pattern": "^[a-z0-9][a-z0-9_.-]*$",
       "title": "Family",
       "type": "string"
     },
     "image": {
+      "description": "Container image, ideally pinned by digest.",
       "minLength": 1,
       "title": "Image",
       "type": "string"
     },
     "name": {
+      "description": "Engine name used in experiments.",
       "maxLength": 64,
       "pattern": "^[a-z0-9][a-z0-9_.-]*$",
       "title": "Name",
@@ -32,10 +35,12 @@
         }
       ],
       "default": null,
+      "description": "Free text shown in manifests.",
       "title": "Notes"
     },
     "platforms": {
       "default": [],
+      "description": "Docker platforms the image runs on natively; empty means any.",
       "items": {
         "type": "string"
       },
@@ -47,10 +52,12 @@
         "type": "string"
       },
       "default": {},
+      "description": "Spark settings the engine needs (plugins, memory, ...).",
       "title": "Spark Conf",
       "type": "object"
     },
     "spark_versions": {
+      "description": "Apache Spark versions the engine supports.",
       "items": {
         "type": "string"
       },

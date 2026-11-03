@@ -12,6 +12,9 @@ nav:
   - External clusters: external.md
   - Results and reports: results.md
   - Troubleshooting: troubleshooting.md
+  - Reference:
+      - CLI: reference/cli.md
+      - File formats: reference/files.md
 theme:
   name: readthedocs
 markdown_extensions:

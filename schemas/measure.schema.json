@@ -16,24 +16,29 @@
   "properties": {
     "description": {
       "default": "",
+      "description": "Free text shown in reports.",
       "title": "Description",
       "type": "string"
     },
     "direction": {
-      "$ref": "#/$defs/Direction"
+      "$ref": "#/$defs/Direction",
+      "description": "`lower` or `higher` is better."
     },
     "formula": {
+      "description": "Arithmetic over `unit.*`, `cluster.*` and `hw.*` inputs.",
       "minLength": 1,
       "title": "Formula",
       "type": "string"
     },
     "name": {
+      "description": "Measure name (must match the file name).",
       "maxLength": 64,
       "pattern": "^[a-z0-9][a-z0-9_.-]*$",
       "title": "Name",
       "type": "string"
     },
     "unit": {
+      "description": "Unit shown in reports.",
       "minLength": 1,
       "title": "Unit",
       "type": "string"

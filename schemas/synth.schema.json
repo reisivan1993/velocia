@@ -33,7 +33,8 @@
     },
     "key_dist": {
       "$ref": "#/$defs/KeyDistribution",
-      "default": "uniform"
+      "default": "uniform",
+      "description": "Key distribution: uniform, zipf or hotkey."
     },
     "keys": {
       "default": 100000,
@@ -60,6 +61,7 @@
     },
     "payload_columns": {
       "default": 4,
+      "description": "Number of long columns `p0`.. (wide rows).",
       "maximum": 2000,
       "minimum": 1,
       "title": "Payload Columns",
@@ -67,12 +69,14 @@
     },
     "rows": {
       "default": 1000000,
+      "description": "Rows in `fact`.",
       "exclusiveMinimum": 0,
       "title": "Rows",
       "type": "integer"
     },
     "seed": {
       "default": 42,
+      "description": "Generator seed: the same spec and seed give the same data.",
       "title": "Seed",
       "type": "integer"
     },

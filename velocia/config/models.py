@@ -77,8 +77,19 @@ def parse_duration(value: str) -> timedelta:
     return timedelta(**{_DURATION_UNITS[match.group(2)]: int(match.group(1))})
 
 
+def _describe(schema: dict[str, Any], model: type) -> None:
+    """Fill in field descriptions from ``field_docs`` for the published JSON Schemas."""
+    from velocia.config.field_docs import FIELD_DOCS
+
+    for name, prop in (schema.get("properties") or {}).items():
+        if "description" not in prop:
+            text = FIELD_DOCS.get(f"{model.__name__}.{name}") or FIELD_DOCS.get(f"*.{name}")
+            if text:
+                prop["description"] = text
+
+
 class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True, json_schema_extra=_describe)
 
 
 # --- velocia.yaml ---------------------------------------------------------------------------

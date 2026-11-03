@@ -14,16 +14,19 @@
         }
       ],
       "default": null,
+      "description": "Accelerator model, recorded as declared.",
       "title": "Accelerator Model"
     },
     "accelerators_per_node": {
       "default": 0,
+      "description": "Accelerator devices per node (for `accelerator_hours`).",
       "minimum": 0,
       "title": "Accelerators Per Node",
       "type": "integer"
     },
     "custom": {
       "default": {},
+      "description": "Coefficients for formula measures, available as `hw.<key>`.",
       "patternProperties": {
         "^[A-Za-z_][A-Za-z0-9_]*$": {
           "type": "number"
@@ -36,6 +39,7 @@
       "type": "object"
     },
     "name": {
+      "description": "Profile name (the file name in `hardware_dir`).",
       "maxLength": 64,
       "pattern": "^[a-z0-9][a-z0-9_.-]*$",
       "title": "Name",
@@ -52,6 +56,7 @@
         }
       ],
       "default": null,
+      "description": "Price of one node for one hour (for `cost_usd`).",
       "title": "Price Per Node Hour Usd"
     },
     "watts_per_node": {
@@ -65,6 +70,7 @@
         }
       ],
       "default": null,
+      "description": "Power draw per node (for `energy_kwh`, an estimate).",
       "title": "Watts Per Node"
     }
   },

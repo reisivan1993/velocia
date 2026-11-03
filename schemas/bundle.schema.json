@@ -6,10 +6,12 @@
         "name": {
           "const": "velocia",
           "default": "velocia",
+          "description": "Always `velocia`.",
           "title": "Name",
           "type": "string"
         },
         "version": {
+          "description": "Velocia version.",
           "title": "Version",
           "type": "string"
         }
@@ -26,15 +28,18 @@
   "additionalProperties": false,
   "properties": {
     "created_at": {
+      "description": "When the bundle was written (UTC).",
       "format": "date-time",
       "title": "Created At",
       "type": "string"
     },
     "cross_hardware": {
+      "description": "True when cells ran on more than one hardware manifest.",
       "title": "Cross Hardware",
       "type": "boolean"
     },
     "engines": {
+      "description": "Engines in the experiment.",
       "items": {
         "type": "string"
       },
@@ -42,16 +47,19 @@
       "type": "array"
     },
     "experiment_id": {
+      "description": "The exported experiment.",
       "title": "Experiment Id",
       "type": "string"
     },
     "format": {
       "const": "benchmark-bundle",
       "default": "benchmark-bundle",
+      "description": "Always `benchmark-bundle`.",
       "title": "Format",
       "type": "string"
     },
     "hardware_manifest_hashes": {
+      "description": "Hardware manifests the cells ran on.",
       "items": {
         "type": "string"
       },
@@ -59,30 +67,36 @@
       "type": "array"
     },
     "label": {
+      "description": "Results label (never an official TPC result).",
       "title": "Label",
       "type": "string"
     },
     "producer": {
-      "$ref": "#/$defs/Producer"
+      "$ref": "#/$defs/Producer",
+      "description": "The tool that wrote the bundle."
     },
     "reference_engine": {
+      "description": "Reference engine of the experiment.",
       "title": "Reference Engine",
       "type": "string"
     },
     "sql_stripped": {
       "default": false,
+      "description": "True when SQL text and plan literals were removed from event logs.",
       "title": "Sql Stripped",
       "type": "boolean"
     },
     "unit_tag_format": {
       "const": "velocia:<run_id>:<unit_id>:<rep>",
       "default": "velocia:<run_id>:<unit_id>:<rep>",
+      "description": "Job description tag that finds a unit's executions in the event logs.",
       "title": "Unit Tag Format",
       "type": "string"
     },
     "version": {
       "const": 1,
       "default": 1,
+      "description": "Format version.",
       "title": "Version",
       "type": "integer"
     }

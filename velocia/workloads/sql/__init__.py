@@ -17,9 +17,10 @@ def natural_key(unit_id: str) -> list[int | str]:
 
 
 def read_sql(path: Path) -> str:
-    """Query text without the generated header comment."""
+    """Query text without ``-- `` comment lines or a trailing semicolon (users' own files)."""
     lines = path.read_text("utf-8").splitlines()
-    return "\n".join(line for line in lines if not line.startswith("-- ")).strip()
+    text = "\n".join(line for line in lines if not line.startswith("-- ")).strip()
+    return text.removesuffix(";").rstrip()
 
 
 @dataclass(frozen=True)

@@ -104,3 +104,24 @@ def test_published_schemas_are_up_to_date(name: str) -> None:
     assert published == render(SCHEMAS[name], name), (
         "run: uv run python -m velocia.config.schema_export"
     )
+
+
+def test_every_published_field_is_described() -> None:
+    """The reference docs and editor help come from these descriptions (field_docs.py)."""
+    missing = []
+    for name, model in SCHEMAS.items():
+        schema = model.model_json_schema()
+        for title, part in [(name, schema), *(schema.get("$defs") or {}).items()]:
+            for field, prop in (part.get("properties") or {}).items():
+                if not prop.get("description"):
+                    missing.append(f"{title}.{field}")
+    assert missing == [], "describe them in velocia/config/field_docs.py"
+
+
+def test_reference_docs_are_current() -> None:
+    from velocia.docs_reference import OUT, pages
+
+    for page, text in pages().items():
+        assert (ROOT / OUT / page).read_text() == text, (
+            "run: uv run python -m velocia.docs_reference"
+        )

@@ -38,7 +38,7 @@ from velocia.report.build import (
 from velocia.report.compare import CompareError
 from velocia.report.compare import compare as run_compare
 from velocia.store.catalog import Catalog
-from velocia.workloads import UnknownUnitError, get_workload, select_units
+from velocia.workloads import UnknownUnitError, get_workload, load_workloads, select_units
 
 app = typer.Typer(
     name="velocia",
@@ -49,11 +49,12 @@ app = typer.Typer(
 engines_app = typer.Typer(help="Engine images and compatibility.", no_args_is_help=True)
 measures_app = typer.Typer(help="Built-in and custom measures.", no_args_is_help=True)
 hardware_app = typer.Typer(help="Hardware probes and profiles.", no_args_is_help=True)
+workloads_app = typer.Typer(help="Workloads and their units.", no_args_is_help=True)
 app.add_typer(engines_app, name="engines")
 app.add_typer(measures_app, name="measures")
 app.add_typer(hardware_app, name="hardware")
+app.add_typer(workloads_app, name="workloads")
 
-NOT_IMPLEMENTED_EXIT = 2
 CONFIG_FILE = Path("velocia.yaml")
 
 
@@ -77,11 +78,6 @@ class ReportFormat(StrEnum):
     md = "md"
     json = "json"
     html = "html"
-
-
-def _not_implemented(task: str) -> NoReturn:
-    typer.echo(f"Not implemented yet (plan task {task}, docs/plan/01-v0.1-harness.md).", err=True)
-    raise typer.Exit(NOT_IMPLEMENTED_EXIT)
 
 
 def _fail(message: str) -> NoReturn:
@@ -523,9 +519,66 @@ def measures_check(file: Annotated[Path, typer.Argument(help="Measure YAML.")]) 
 @hardware_app.command("probe")
 def hardware_probe(
     cluster: Annotated[str | None, typer.Option(help="Named cluster.")] = None,
+    experiment: Annotated[
+        Path | None, typer.Option(help="Experiment file that defines --cluster.")
+    ] = None,
 ) -> None:
-    """Print what the manifest will record about the hardware."""
-    _not_implemented("T11")
+    """Print what the manifest will record about the hardware, and its hash."""
+    from velocia.hardware.probe import hardware_manifest_hash, probe_local
+    from velocia.runners.external import declared_hardware
+
+    config = _config()
+    if cluster is None:
+        hardware = probe_local()
+    else:
+        if experiment is None:
+            _fail("--cluster needs --experiment, the experiment file that defines the cluster")
+        try:
+            clusters = load_model(experiment, models.Experiment).named_clusters
+        except ConfigError as exc:
+            _fail(str(exc))
+        if cluster not in clusters:
+            _fail(f"{experiment} has no cluster {cluster!r} (has: {', '.join(clusters)})")
+        definition = clusters[cluster]
+        profile = None
+        if definition.hardware_profile:
+            path = Path(config.hardware_dir) / f"{definition.hardware_profile}.yaml"
+            try:
+                profile = load_model(path, models.HardwareProfile)
+            except ConfigError as exc:
+                _fail(str(exc))
+        if isinstance(definition, models.ExternalCluster):
+            hardware = declared_hardware(cluster, definition, profile)
+        else:
+            hardware = probe_local(profile)
+    typer.echo(json.dumps(hardware, indent=2))
+    typer.echo(f"hardware_manifest_hash: {hardware_manifest_hash(hardware)}")
+
+
+@workloads_app.command("list")
+def workloads_list() -> None:
+    """List the built-in and plugin workloads."""
+    for suite, workload in load_workloads().items():
+        units = workload.units()
+        typer.echo(
+            f"{suite.value:8} {workload.kind.value:4} {len(units):3} units  {workload.label}"
+        )
+    typer.echo("custom   your own SQL directory or job (see docs: Experiments)")
+
+
+@workloads_app.command("show")
+def workloads_show(suite: Annotated[str, typer.Argument(help="Suite name.")]) -> None:
+    """Show a workload's units."""
+    try:
+        workload = get_workload(models.Suite(suite))
+    except ValueError:
+        workload = None
+    if workload is None:
+        _fail(f"no workload {suite!r}; see: velocia workloads list")
+    typer.echo(f"{suite}: {workload.label} ({workload.kind.value})")
+    for unit in workload.units():
+        what = unit.job if unit.job else (unit.sql or "").splitlines()[0][:70]
+        typer.echo(f"  {unit.id:16} {what}")
 
 
 def main() -> None:

@@ -5,6 +5,7 @@
       "properties": {
         "allow_cross_hardware": {
           "default": false,
+          "description": "Allow engines on different hardware; needs a normalized measure (cost, node-hours, ...).",
           "title": "Allow Cross Hardware",
           "type": "boolean"
         }
@@ -17,6 +18,7 @@
       "properties": {
         "args": {
           "default": [],
+          "description": "Jar only: program arguments; `${table:<name>}` becomes the table's path.",
           "items": {
             "type": "string"
           },
@@ -24,10 +26,12 @@
           "type": "array"
         },
         "artifact": {
+          "description": "A `.py`, `.zip` or `.jar`, relative to the experiment file.",
           "title": "Artifact",
           "type": "string"
         },
         "entrypoint": {
+          "description": "`module:function` (Python) or the main class (jar).",
           "title": "Entrypoint",
           "type": "string"
         },
@@ -41,6 +45,7 @@
             }
           ],
           "default": null,
+          "description": "Python only: `module:function` returning rows and checksum per unit.",
           "title": "Validator"
         }
       },
@@ -74,9 +79,11 @@
             }
           ],
           "default": null,
+          "description": "Cluster (from `clusters`) the engine runs on.",
           "title": "Cluster"
         },
         "name": {
+          "description": "Engine name.",
           "maxLength": 64,
           "pattern": "^[a-z0-9][a-z0-9_.-]*$",
           "title": "Name",
@@ -93,11 +100,13 @@
       "additionalProperties": false,
       "properties": {
         "data_uri": {
+          "description": "Storage the executors read (`s3a://`, `hdfs://`, `file://`); datasets are copied there.",
           "title": "Data Uri",
           "type": "string"
         },
         "deploy_mode": {
           "default": "client",
+          "description": "Only `client` so far: the driver runs on this machine.",
           "enum": [
             "client",
             "cluster"
@@ -107,6 +116,7 @@
         },
         "docker_args": {
           "default": [],
+          "description": "Extra `docker run` arguments for the submitting container.",
           "items": {
             "type": "string"
           },
@@ -115,30 +125,36 @@
         },
         "docker_network": {
           "default": "host",
+          "description": "Docker network of the submitting container.",
           "title": "Docker Network",
           "type": "string"
         },
         "driver_memory": {
           "default": "2g",
+          "description": "Driver memory, e.g. `2g`.",
           "pattern": "^[1-9][0-9]*[kmgt]$",
           "title": "Driver Memory",
           "type": "string"
         },
         "eventlog_uri": {
+          "description": "Where Spark writes event logs; Velocia copies them back.",
           "title": "Eventlog Uri",
           "type": "string"
         },
         "executor_cores": {
+          "description": "Cores per executor.",
           "minimum": 1,
           "title": "Executor Cores",
           "type": "integer"
         },
         "executor_memory": {
+          "description": "Memory per executor, e.g. `4g`.",
           "pattern": "^[1-9][0-9]*[kmgt]$",
           "title": "Executor Memory",
           "type": "string"
         },
         "executors": {
+          "description": "Executors (local: multiplied by `executor_cores` for local[N]).",
           "minimum": 1,
           "title": "Executors",
           "type": "integer"
@@ -155,9 +171,11 @@
             }
           ],
           "default": null,
+          "description": "Hardware profile name (file in `hardware_dir`) describing the nodes.",
           "title": "Hardware Profile"
         },
         "master": {
+          "description": "Spark master URL, e.g. `spark://host:7077`.",
           "title": "Master",
           "type": "string"
         },
@@ -171,10 +189,12 @@
             }
           ],
           "default": null,
+          "description": "The master's web UI, for the quiet check.",
           "title": "Rest Url"
         },
         "runner": {
           "const": "external",
+          "description": "`local` (Docker), `k8s` or `external` (a cluster Velocia doesn't manage).",
           "title": "Runner",
           "type": "string"
         },
@@ -188,10 +208,12 @@
             }
           ],
           "default": null,
+          "description": "Submit with the Spark install here instead of the engine image in Docker.",
           "title": "Spark Home"
         },
         "submit_args": {
           "default": [],
+          "description": "Extra spark-submit arguments, e.g. `--packages` or `--conf` for storage.",
           "items": {
             "type": "string"
           },
@@ -216,21 +238,25 @@
       "properties": {
         "driver_memory": {
           "default": "2g",
+          "description": "Driver memory, e.g. `2g`.",
           "pattern": "^[1-9][0-9]*[kmgt]$",
           "title": "Driver Memory",
           "type": "string"
         },
         "executor_cores": {
+          "description": "Cores per executor.",
           "minimum": 1,
           "title": "Executor Cores",
           "type": "integer"
         },
         "executor_memory": {
+          "description": "Memory per executor, e.g. `4g`.",
           "pattern": "^[1-9][0-9]*[kmgt]$",
           "title": "Executor Memory",
           "type": "string"
         },
         "executors": {
+          "description": "Executors (local: multiplied by `executor_cores` for local[N]).",
           "minimum": 1,
           "title": "Executors",
           "type": "integer"
@@ -247,10 +273,12 @@
             }
           ],
           "default": null,
+          "description": "Hardware profile name (file in `hardware_dir`) describing the nodes.",
           "title": "Hardware Profile"
         },
         "namespace": {
           "default": "default",
+          "description": "Kubernetes namespace.",
           "title": "Namespace",
           "type": "string"
         },
@@ -259,6 +287,7 @@
             "type": "string"
           },
           "default": {},
+          "description": "Node labels the pods must match.",
           "title": "Node Selector",
           "type": "object"
         },
@@ -267,16 +296,19 @@
             "type": "integer"
           },
           "default": {},
+          "description": "Extended resources per executor, e.g. accelerator devices.",
           "title": "Resources",
           "type": "object"
         },
         "runner": {
           "const": "k8s",
+          "description": "`local` (Docker), `k8s` or `external` (a cluster Velocia doesn't manage).",
           "title": "Runner",
           "type": "string"
         },
         "tolerations": {
           "default": [],
+          "description": "Pod tolerations.",
           "items": {
             "additionalProperties": {
               "type": "string"
@@ -310,21 +342,25 @@
       "properties": {
         "driver_memory": {
           "default": "2g",
+          "description": "Driver memory, e.g. `2g`.",
           "pattern": "^[1-9][0-9]*[kmgt]$",
           "title": "Driver Memory",
           "type": "string"
         },
         "executor_cores": {
+          "description": "Cores per executor.",
           "minimum": 1,
           "title": "Executor Cores",
           "type": "integer"
         },
         "executor_memory": {
+          "description": "Memory per executor, e.g. `4g`.",
           "pattern": "^[1-9][0-9]*[kmgt]$",
           "title": "Executor Memory",
           "type": "string"
         },
         "executors": {
+          "description": "Executors (local: multiplied by `executor_cores` for local[N]).",
           "minimum": 1,
           "title": "Executors",
           "type": "integer"
@@ -341,10 +377,12 @@
             }
           ],
           "default": null,
+          "description": "Hardware profile name (file in `hardware_dir`) describing the nodes.",
           "title": "Hardware Profile"
         },
         "runner": {
           "const": "local",
+          "description": "`local` (Docker), `k8s` or `external` (a cluster Velocia doesn't manage).",
           "title": "Runner",
           "type": "string"
         }
@@ -403,7 +441,8 @@
         },
         "key_dist": {
           "$ref": "#/$defs/KeyDistribution",
-          "default": "uniform"
+          "default": "uniform",
+          "description": "Key distribution: uniform, zipf or hotkey."
         },
         "keys": {
           "default": 100000,
@@ -430,6 +469,7 @@
         },
         "payload_columns": {
           "default": 4,
+          "description": "Number of long columns `p0`.. (wide rows).",
           "maximum": 2000,
           "minimum": 1,
           "title": "Payload Columns",
@@ -437,12 +477,14 @@
         },
         "rows": {
           "default": 1000000,
+          "description": "Rows in `fact`.",
           "exclusiveMinimum": 0,
           "title": "Rows",
           "type": "integer"
         },
         "seed": {
           "default": 42,
+          "description": "Generator seed: the same spec and seed give the same data.",
           "title": "Seed",
           "type": "integer"
         },
@@ -495,11 +537,13 @@
             }
           ],
           "default": null,
+          "description": "Use this generated dataset instead of one derived from the fields above.",
           "title": "Dataset Id"
         },
         "format": {
           "$ref": "#/$defs/DataFormat",
-          "default": "parquet-zstd"
+          "default": "parquet-zstd",
+          "description": "Data file format."
         },
         "job": {
           "anyOf": [
@@ -510,10 +554,12 @@
               "type": "null"
             }
           ],
-          "default": null
+          "default": null,
+          "description": "Custom job (Python or jar)."
         },
         "kind": {
-          "$ref": "#/$defs/WorkloadKind"
+          "$ref": "#/$defs/WorkloadKind",
+          "description": "`sql` (queries) or `job` (job units)."
         },
         "rows": {
           "anyOf": [
@@ -526,6 +572,7 @@
             }
           ],
           "default": null,
+          "description": "Size of a generated job dataset (records, lines, edges or points).",
           "title": "Rows"
         },
         "scale_factor": {
@@ -539,6 +586,7 @@
             }
           ],
           "default": null,
+          "description": "TPC-H/TPC-DS-derived scale factor.",
           "title": "Scale Factor"
         },
         "sql_dir": {
@@ -551,10 +599,12 @@
             }
           ],
           "default": null,
+          "description": "Custom SQL: a directory of `<unit>.sql` files, relative to the experiment file.",
           "title": "Sql Dir"
         },
         "suite": {
-          "$ref": "#/$defs/Suite"
+          "$ref": "#/$defs/Suite",
+          "description": "Which workload: tpch, tpcds, tera, text, etl, graph, kmeans, synth or custom."
         },
         "sweep": {
           "anyOf": [
@@ -586,6 +636,7 @@
             }
           ],
           "default": null,
+          "description": "Synth parameters to sweep: each value is its own cell (and dataset).",
           "title": "Sweep"
         },
         "synth": {
@@ -597,7 +648,8 @@
               "type": "null"
             }
           ],
-          "default": null
+          "default": null,
+          "description": "Synth generator settings (synth suite only)."
         },
         "units": {
           "anyOf": [
@@ -614,6 +666,7 @@
             }
           ],
           "default": "all",
+          "description": "`all`, or the units to run.",
           "title": "Units"
         }
       },
@@ -666,6 +719,7 @@
         }
       ],
       "default": null,
+      "description": "One cluster for every engine (or use `clusters`).",
       "title": "Cluster"
     },
     "clusters": {
@@ -704,15 +758,18 @@
         }
       ],
       "default": null,
+      "description": "Named clusters; each engine names its cluster.",
       "title": "Clusters"
     },
     "comparison": {
       "$ref": "#/$defs/Comparison",
       "default": {
         "allow_cross_hardware": false
-      }
+      },
+      "description": "Rules for comparing across hardware."
     },
     "engines": {
+      "description": "Engines to compare: names, or `{name, cluster}` with several clusters.",
       "items": {
         "oneOf": [
           {
@@ -734,6 +791,7 @@
         "wall_time",
         "task_cpu_time"
       ],
+      "description": "Measures to compute; the first one is the headline.",
       "items": {
         "maxLength": 64,
         "pattern": "^[a-z0-9][a-z0-9_.-]*$",
@@ -748,6 +806,7 @@
         "cold",
         "warm"
       ],
+      "description": "`cold` (fresh application per repetition) and/or `warm` (one application, one discarded warm-up).",
       "items": {
         "$ref": "#/$defs/Mode"
       },
@@ -756,6 +815,7 @@
       "type": "array"
     },
     "name": {
+      "description": "Experiment name; results are `<name>-<timestamp>`, and history groups by it.",
       "maxLength": 64,
       "pattern": "^[a-z0-9][a-z0-9_.-]*$",
       "title": "Name",
@@ -779,9 +839,11 @@
         }
       ],
       "default": null,
+      "description": "USD per node-hour by hardware profile name; overrides the profiles' prices for `cost_usd`.",
       "title": "Price Table"
     },
     "reference_engine": {
+      "description": "The engine every ratio and correctness check is relative to.",
       "maxLength": 64,
       "pattern": "^[a-z0-9][a-z0-9_.-]*$",
       "title": "Reference Engine",
@@ -789,6 +851,7 @@
     },
     "repetitions": {
       "default": 5,
+      "description": "Timed repetitions per cell (5 or more recommended).",
       "minimum": 1,
       "title": "Repetitions",
       "type": "integer"
@@ -835,17 +898,20 @@
         ]
       },
       "default": {},
+      "description": "Spark settings for every engine; a list sweeps the setting.",
       "title": "Spark Conf",
       "type": "object"
     },
     "timeout_per_unit": {
       "default": "30m",
+      "description": "Per-unit time limit, e.g. `30m`; timed-out units are reported.",
       "pattern": "^[1-9][0-9]*(s|m|h)$",
       "title": "Timeout Per Unit",
       "type": "string"
     },
     "workload": {
-      "$ref": "#/$defs/Workload"
+      "$ref": "#/$defs/Workload",
+      "description": "What to run."
     }
   },
   "required": [

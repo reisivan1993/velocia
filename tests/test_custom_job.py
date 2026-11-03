@@ -270,3 +270,24 @@ def test_jar_command_and_rules(tmp_path: Path) -> None:
     exp.write_text(base.format(validator="", modes="cold, warm"))
     with pytest.raises(RunError, match="cold mode only"):
         prepare(exp, config)
+
+
+def test_custom_sql_units_come_from_the_sql_dir(tmp_path: Path) -> None:
+    from velocia.config import VelociaConfig
+
+    (tmp_path / "queries").mkdir()
+    (tmp_path / "queries" / "top_parts.sql").write_text("SELECT 1 AS one\n")
+    (tmp_path / "queries" / "revenue.sql").write_text("-- note\nSELECT 2 AS two;\n")
+    exp = tmp_path / "exp.yaml"
+    exp.write_text(
+        "name: s\nworkload: {kind: sql, suite: custom, sql_dir: queries, dataset_id: d}\n"
+        "engines: [spark-vanilla]\nreference_engine: spark-vanilla\ncluster: {runner: local, "
+        "executors: 1, executor_cores: 1, executor_memory: 1g}\n"
+    )
+    config = VelociaConfig(results_dir=str(tmp_path / "r"))
+    # Past unit selection, the run stops at the missing dataset: the units were found.
+    with pytest.raises(RunError, match="dataset d not found"):
+        prepare(exp, config)
+    exp.write_text(exp.read_text().replace("sql_dir: queries", "sql_dir: nowhere"))
+    with pytest.raises(RunError, match="sql_dir"):
+        prepare(exp, config)

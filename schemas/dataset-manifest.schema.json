@@ -12,11 +12,13 @@
       "additionalProperties": false,
       "properties": {
         "bytes": {
+          "description": "File size.",
           "minimum": 0,
           "title": "Bytes",
           "type": "integer"
         },
         "path": {
+          "description": "Path relative to the dataset location.",
           "title": "Path",
           "type": "string"
         }
@@ -32,10 +34,12 @@
       "additionalProperties": false,
       "properties": {
         "checksum": {
+          "description": "Content checksum of the table's rows.",
           "title": "Checksum",
           "type": "string"
         },
         "files": {
+          "description": "The table's data files.",
           "items": {
             "$ref": "#/$defs/DatasetFile"
           },
@@ -43,10 +47,12 @@
           "type": "array"
         },
         "name": {
+          "description": "Table name.",
           "title": "Name",
           "type": "string"
         },
         "rows": {
+          "description": "Row count.",
           "minimum": 0,
           "title": "Rows",
           "type": "integer"
@@ -82,31 +88,38 @@
   "additionalProperties": false,
   "properties": {
     "bytes": {
+      "description": "Total size of the data files.",
       "minimum": 0,
       "title": "Bytes",
       "type": "integer"
     },
     "checksum": {
+      "description": "Content checksum: the same rows give the same checksum in any format.",
       "title": "Checksum",
       "type": "string"
     },
     "compression": {
+      "description": "Parquet compression codec.",
       "title": "Compression",
       "type": "string"
     },
     "created_at": {
+      "description": "When the dataset was generated (UTC).",
       "format": "date-time",
       "title": "Created At",
       "type": "string"
     },
     "data_format": {
-      "$ref": "#/$defs/DataFormat"
+      "$ref": "#/$defs/DataFormat",
+      "description": "File format."
     },
     "dataset_id": {
+      "description": "Dataset name, e.g. `tpch-sf1-parquet-zstd`.",
       "title": "Dataset Id",
       "type": "string"
     },
     "files": {
+      "description": "Number of data files.",
       "minimum": 0,
       "title": "Files",
       "type": "integer"
@@ -114,10 +127,12 @@
     "format": {
       "const": "velocia-dataset",
       "default": "velocia-dataset",
+      "description": "Always `velocia-dataset`.",
       "title": "Format",
       "type": "string"
     },
     "generator": {
+      "description": "Generator used.",
       "title": "Generator",
       "type": "string"
     },
@@ -135,27 +150,33 @@
           }
         ]
       },
+      "description": "Every generator parameter.",
       "title": "Generator Params",
       "type": "object"
     },
     "generator_version": {
+      "description": "Generator version.",
       "title": "Generator Version",
       "type": "string"
     },
     "label": {
+      "description": "How results on this data are labeled (never an official TPC result).",
       "title": "Label",
       "type": "string"
     },
     "location": {
+      "description": "Directory of the data.",
       "title": "Location",
       "type": "string"
     },
     "row_group_size": {
+      "description": "Rows per Parquet row group (target).",
       "exclusiveMinimum": 0,
       "title": "Row Group Size",
       "type": "integer"
     },
     "scale": {
+      "description": "Scale factor or row count.",
       "title": "Scale",
       "type": "number"
     },
@@ -168,12 +189,15 @@
           "type": "null"
         }
       ],
+      "description": "Generator seed, when it has one.",
       "title": "Seed"
     },
     "suite": {
-      "$ref": "#/$defs/Suite"
+      "$ref": "#/$defs/Suite",
+      "description": "Suite that generated it."
     },
     "tables": {
+      "description": "Tables with rows, content checksum and files.",
       "items": {
         "$ref": "#/$defs/DatasetTable"
       },
@@ -181,12 +205,14 @@
       "type": "array"
     },
     "velocia_version": {
+      "description": "Velocia version that wrote this.",
       "title": "Velocia Version",
       "type": "string"
     },
     "version": {
       "const": 1,
       "default": 1,
+      "description": "Format version.",
       "title": "Version",
       "type": "integer"
     }

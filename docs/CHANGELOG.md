@@ -1,5 +1,12 @@
 # Spec changelog
 
+## 2026-11-03 — reference docs, remaining CLI commands, bring-your-own SQL (T59 part)
+
+- `velocia workloads list|show <suite>` and `velocia hardware probe [--cluster NAME --experiment FILE]` implemented (`--experiment` added: clusters are defined in experiment files). No CLI command is a stub any more.
+- Bring-your-own SQL works: `workload: {kind: sql, suite: custom, sql_dir, dataset_id}`, one unit per `<unit>.sql` file (comment lines and a trailing semicolon are ignored).
+- `Experiment.price_table` (04 §3, "optional override") is now used: USD per node-hour by hardware profile name, overriding the profile's price for `cost_usd`.
+- Every field of every published schema has a description (`velocia/config/field_docs.py`), so the JSON Schemas carry them; `docs/user/reference/cli.md` and `files.md` are generated from the CLI and the schemas (`python -m velocia.docs_reference`), and tests fail when either is stale.
+
 ## 2026-11-03 — TPC-DS-derived queries
 
 - Workload `tpcds`: 99 queries `q1`..`q99` generated from DuckDB's `tpcds_queries()` like the TPC-H ones; DuckDB's double-quoted column aliases become backticks for Apache Spark. All 99 run on Apache Spark 3.5.9 and match DuckDB row for row at SF0.1 (with Spark's null ordering); 18 return no rows at that scale. Data: `velocia datagen --suite tpcds --sf N` (SF1-SF10 through DuckDB's dsdgen).

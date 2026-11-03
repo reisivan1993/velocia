@@ -57,6 +57,7 @@ from velocia.runners.local import LocalRunner, container_memory_mb, is_jar, keep
 from velocia.stats.summary import ratio_ci, summarize
 from velocia.store.catalog import Catalog, as_json
 from velocia.workloads import Unit, UnknownUnitError, get_workload, select_units
+from velocia.workloads.sql import SqlWorkload
 from velocia.workloads.synth import render_sql, synth_spec
 
 OPAQUE_UNIT = "app"  # a bring-your-own job that doesn't use the velocia.unit helper
@@ -122,6 +123,17 @@ def prepare(path: Path, config: VelociaConfig, cluster_gate: bool = True) -> Pre
     job = experiment.workload.job
     if experiment.workload.suite is Suite.custom and job is not None:
         units, custom_job = _custom_job(path, experiment)
+    elif experiment.workload.suite is Suite.custom and experiment.workload.sql_dir:
+        sql_dir = (path.parent / experiment.workload.sql_dir).resolve()
+        if not sql_dir.is_dir():
+            raise RunError(f"workload.sql_dir: {sql_dir} not found")
+        own_sql = SqlWorkload(Suite.custom, "your SQL", sql_dir)
+        if not own_sql.units():
+            raise RunError(f"workload.sql_dir: no .sql files in {sql_dir}")
+        try:
+            units = select_units(own_sql, experiment.workload.units)
+        except UnknownUnitError as exc:
+            raise RunError(str(exc)) from exc
     else:
         workload = get_workload(experiment.workload.suite)
         if workload is None:
@@ -901,6 +913,15 @@ def within_tolerance(mine: list[float], ref: list[float], tolerance: float) -> b
     )
 
 
+def _priced(
+    profile: HardwareProfile | None, price_table: dict[str, float] | None
+) -> HardwareProfile | None:
+    """The profile with the experiment's ``price_table`` price for it, if one is given."""
+    if profile is None or not price_table or profile.name not in price_table:
+        return profile
+    return profile.model_copy(update={"price_per_node_hour_usd": price_table[profile.name]})
+
+
 def compute_results(
     catalog: Catalog,
     experiment_id: str,
@@ -924,7 +945,9 @@ def compute_results(
     )
     cluster_inputs = {
         c.cell_key: ClusterInputs.of(
-            c.cluster, prepared.profiles[c.cluster_name], config.pricing.default_node_hour_usd
+            c.cluster,
+            _priced(prepared.profiles[c.cluster_name], exp.price_table),
+            config.pricing.default_node_hour_usd,
         )
         for c in cells
     }
