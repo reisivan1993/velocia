@@ -1,49 +1,77 @@
-# Velocia for Apache Spark — Product Specification
+# Velocia for Apache Spark
 
-As of 2026-10-21. Author: Rei. Status: draft v1, ready for implementation planning.
+Reproducible, statistically honest benchmarks of Apache Spark engines.
 
-> **Name.** "Velocia for Apache Spark" (ASF trademark rules require this form, see `docs/05-quality-and-release.md`). Checked on 2026-10-21: free on PyPI and npm; the GitHub login `Velocia` is taken, so use an org such as `velocia-dev`. **Open risk:** Velocia Inc. (velocia.io), a Toronto mobility-rewards SaaS company, uses the same name. Get a trademark opinion before launch; if needed, rename with one search-and-replace.
+Velocia runs the same workload on vanilla Apache Spark and on accelerated engines (Apache
+DataFusion Comet, Apache Gluten with Velox, or a vendor's hardware accelerator) and tells you
+how much faster each one is, how sure that is, and whether it still gets the right answer.
 
-**Velocia is a dynamometer for Apache Spark engines:** reproducible, statistically honest benchmarks of SQL queries and general Spark jobs (TeraSort, PageRank, ETL pipelines, skew and edge-case sweeps) across engines (vanilla Spark, Gluten/Velox, DataFusion Comet, vendor accelerators), configs, data formats and clusters. Every result has a correctness check, and results can be reported in any unit of measure: time, cost, node-hours or a custom unit defined in YAML. Spark comes first; the interfaces are built so other engine families can be added later.
+- **Every speedup comes with a 95% confidence interval**: a ratio of medians over repeated
+  runs, never a bare "3.2x".
+- **Every result is checked against the reference engine.** A wrong answer is shown as
+  FAILED, never as a speedup.
+- **Every run writes a manifest**: image digests, Spark configuration, hardware, dataset
+  checksum, so a result can be traced and reproduced.
+- **Any unit of measure**: time, CPU, shuffle, cost, node-hours, accelerator-hours, or your
+  own formula (for example a vendor's "compute unit").
 
-It is a **standalone project**: its own repo, its own releases, no dependency on any other tool. It installs with `pip`, needs only Docker or a Kubernetes cluster to run Spark, and stores everything in a local results directory. Its only connection to the outside world is a documented **benchmark bundle** export that any analysis tool can consume.
+Velocia is a standalone command-line tool. It needs Python 3.11+ and Docker (or an existing
+Spark cluster), starts no services of its own, and sends nothing anywhere.
 
 ## Try it
 
-A local comparison of vanilla Apache Spark and Apache DataFusion Comet on TPC-H-derived data
-runs in about 15 minutes: see [`examples/demo/README.md`](examples/demo/README.md). User
-documentation (quickstart, methodology, experiments, measures, engines, results) is in
-[`docs/user/`](docs/user/index.md); build it with `uv run --group docs mkdocs serve`.
+```bash
+git clone https://github.com/reisivan1993/velocia && cd velocia
+uv sync
+uv run velocia engines build spark-vanilla
+uv run velocia engines build spark-comet
+uv run velocia datagen --suite tpch --sf 1
+uv run velocia run examples/demo/tpch-vanilla-vs-comet.yaml
+```
 
-## Files
+About 15 minutes on a laptop, most of it building images. On an Apple M4 Pro this prints
+something like:
 
-| File | Contents |
+```
+spark-comet vs spark-vanilla (cold (cache not dropped)): speedup 2.13x [95% CI 2.04-2.26];
+total wall_time median 9.751 s vs 20.7 s; correctness pass
+```
+
+and writes an HTML report you can open offline. `uv run velocia ui` browses all results.
+See [`examples/demo/`](examples/demo/README.md).
+
+## What it can run
+
+| | |
 | --- | --- |
-| `CLAUDE.md` | Invariants for the coding agent (stays at the repo root) |
-| `docs/01-product.md` | Problem, users, positioning, goals, non-goals, principles, milestones |
-| `docs/02-architecture.md` | Components, deployment, data flow, tech stack, decisions |
-| `docs/03-spec.md` | Workloads, data, experiments, runners, engines, methodology, event-log summaries, storage, bundle export, outputs, acceptance |
-| `docs/04-interfaces.md` | CLI, config files, experiment schema, plugin interfaces, output and bundle formats |
-| `docs/05-quality-and-release.md` | Non-functional requirements, testing, security, compatibility, open-source release |
-| `docs/06-design.md` | Design: architecture diagrams, run lifecycle, module layout, key mechanisms |
-| `docs/plan/` | Implementation plan: overview with decisions to approve, one file per milestone |
-| `docs/CHANGELOG.md` | Spec changes |
+| SQL workloads | 22 TPC-H-derived and 99 TPC-DS-derived queries; your own SQL files |
+| Job workloads | TeraSort, Sort, WordCount, PageRank, KMeans (MLlib), a five-step ETL pipeline; your own Python or jar jobs |
+| Edge cases | Seeded skewed joins, hot keys, nulls, small files, wide rows, nested types, decimals, strings, windows, UDF fallback, swept as curves with CIs |
+| Engines | `spark-vanilla`, `spark-comet`, `spark-gluten` (x86 only), or any image you define |
+| Where | Docker on this machine, or a Spark cluster Velocia doesn't manage (for example a vendor's accelerator servers), with S3, HDFS or shared storage |
+| Outputs | HTML, Markdown and JSON reports; Parquet results; a benchmark bundle any analysis tool can read; a local read-only viewer |
 
-## Prompt for Claude Code
+Results on TPC data are labeled "derived from TPC-H / TPC-DS". They are not official TPC
+results.
 
-```
-Read every file in docs/ and CLAUDE.md before doing anything else.
+## Documentation
 
-1. Review first. List contradictions, gaps and risky assumptions in the spec,
-   each with a proposed resolution. Stop and wait for my answers.
-2. Then write an implementation plan in docs/plan/:
-   - docs/plan/00-overview.md: milestone order matching docs/01-product.md,
-     critical path, and an effort table.
-   - One file per milestone: tasks of at most one working day each, with
-     dependencies, the acceptance test that proves each task done, and the
-     spec section it implements.
-   - Estimates in MY hours (spec, review, testing, debugging), assuming you
-     write most of the code and I have 10 effective hours a week.
-   - Risks and time-boxes for the uncertain tasks (engine images first).
-3. Do not write product code until I approve the plan.
-```
+- [User guide](docs/user/index.md): quickstart, methodology, experiments, measures, engines,
+  external clusters, results, troubleshooting, CLI and file-format reference
+  (`uv run --group docs mkdocs serve`)
+- [Specification](docs/03-spec.md), [interfaces](docs/04-interfaces.md),
+  [design](docs/06-design.md) and the [changelog](docs/CHANGELOG.md)
+- [Plan](docs/plan/00-overview.md) and [decisions](docs/plan/decisions.md)
+- [Origin](docs/00-origin.md): how the project was specified
+
+## Status
+
+Pre-release (0.1.0.dev0). Milestones v0.1 (local harness) and v0.2 (jobs, edge cases,
+external clusters, bundles, viewer) are implemented. Next: Kubernetes and one cloud provider
+(v0.3). Not published to PyPI yet: install from a clone.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Apache Spark, Apache
+DataFusion Comet and Apache Gluten are trademarks of the Apache Software Foundation; Velocia is
+not affiliated with or endorsed by it.
