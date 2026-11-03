@@ -109,3 +109,9 @@ Four runs of `examples/acceptance/tpch-sf10.yaml` (TPC-H-derived SF10, vanilla v
 - **Bring-your-own jobs: Python only for now.** Jar artifacts and opaque third-party applications need a second submission path (their main class instead of Velocia's driver) and event-log-only timing; the image has `javac`, so a test jar is possible later.
 - **S3 test with SeaweedFS**, not MinIO (no longer published as an image). Storage settings go in the cluster's `submit_args`, because they must also apply to the engine check.
 - **Viewer without FastAPI/React**: the standard library's HTTP server and Jinja templates do the four pages, with no new dependency or JavaScript toolchain.
+
+## 2026-11-03 — T20: Kubernetes runner, developed in CI only
+
+- At the user's choice nothing was installed on the dev Mac; the runner was built against unit tests and a kind + Spark Operator 2.5.2 workflow on a `k8s-dev` branch. It passed on the second CI run (the first failed only on a test assertion).
+- **One volume claim for everything** (datasets, run inputs, outputs, event logs) mounted at `/velocia`, reached through a short-lived helper pod with `kubectl cp`: no object-store client and no assumptions about cluster networking. Multi-node clusters need ReadWriteMany storage; an S3-based path like the external runner's can follow.
+- Not done: dropping node page caches (privileged init container), per-cell node probes beyond the Kubernetes API's node facts.
