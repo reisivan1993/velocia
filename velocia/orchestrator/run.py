@@ -53,6 +53,7 @@ from velocia.measures.plugins import PluginError
 from velocia.measures.registry import load_measures
 from velocia.runners.base import AppResult, AppSpec
 from velocia.runners.external import ExternalRunner, declared_hardware
+from velocia.runners.k8s import K8sRunner, node_hardware
 from velocia.runners.local import LocalRunner, container_memory_mb, is_jar, keep_awake
 from velocia.stats.summary import ratio_ci, summarize
 from velocia.store.catalog import Catalog, as_json
@@ -154,8 +155,6 @@ def prepare(path: Path, config: VelociaConfig, cluster_gate: bool = True) -> Pre
 
     clusters = experiment.named_clusters
     for name, cluster in clusters.items():
-        if isinstance(cluster, K8sCluster):
-            raise RunError(f"cluster {name!r}: the k8s runner is not available yet")
         if isinstance(cluster, ExternalCluster):
             if cluster.deploy_mode != "client":
                 raise RunError(f"cluster {name!r}: the external runner supports client mode only")
@@ -502,9 +501,11 @@ class Orchestrator:
         hardware_base: dict[str, Any],
     ) -> None:
         exp = self.p.experiment
-        runner: LocalRunner | ExternalRunner
+        runner: LocalRunner | ExternalRunner | K8sRunner
         if isinstance(cell.cluster, ExternalCluster):
             runner = ExternalRunner(cell.cluster)
+        elif isinstance(cell.cluster, K8sCluster):
+            runner = K8sRunner(cell.cluster)
         else:
             assert isinstance(cell.cluster, LocalCluster)
             runner = LocalRunner(cell.cluster, self.config.quiet_check.max_cpu_pct)
@@ -523,6 +524,10 @@ class Orchestrator:
             assert isinstance(cell.cluster, ExternalCluster)
             self._stage(runner, cell, driver, engine.definition.image)
             hardware = declared_hardware(cell.cluster_name, cell.cluster, profile)
+        elif isinstance(runner, K8sRunner):
+            assert isinstance(cell.cluster, K8sCluster)
+            self._stage(runner, cell, driver, engine.definition.image)
+            hardware = node_hardware(cell.cluster_name, cell.cluster, runner.nodes(), profile)
         else:
             hardware = {
                 **hardware_base,
@@ -651,7 +656,13 @@ class Orchestrator:
             for u in self.p.units
         ]
 
-    def _stage(self, runner: ExternalRunner, cell: Cell, driver: DriverPackage, image: str) -> None:
+    def _stage(
+        self,
+        runner: ExternalRunner | K8sRunner,
+        cell: Cell,
+        driver: DriverPackage,
+        image: str,
+    ) -> None:
         """Put the cell's dataset on the cluster's storage and verify it, once per run."""
         cluster_name = cell.cluster_name
         dataset = self.p.dataset_for(cell)

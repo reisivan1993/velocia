@@ -269,6 +269,9 @@ class K8sCluster(ClusterBase):
     node_selector: dict[str, str] = {}
     tolerations: list[dict[str, str]] = []
     resources: dict[str, int] = {}
+    volume_claim: str = "velocia"  # PVC mounted at /velocia in every pod (data, runs, logs)
+    service_account: str = "spark"  # the driver's account; it creates executor pods
+    context: str | None = None  # kubectl context; default: the current one
 
 
 class ExternalCluster(ClusterBase):

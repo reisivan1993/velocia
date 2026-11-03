@@ -1,0 +1,67 @@
+# Kubernetes runner end to end (plan T20): kind + the Spark Operator. Nightly and on demand, so
+# PR CI stays Docker-only (docs/plan/00-overview.md risks).
+name: k8s
+
+on:
+  schedule:
+    - cron: "47 3 * * *"
+  workflow_dispatch:
+  push:
+    branches: [k8s-dev]  # iterate on the runner without touching main's CI
+
+permissions:
+  contents: read
+
+concurrency:
+  group: k8s-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  kind:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.11"
+      - run: uv sync --locked
+      - name: Build the engine image
+        run: uv run velocia engines build spark-vanilla
+      - uses: helm/kind-action@v1.15.1
+        with:
+          cluster_name: velocia
+      - name: Load the image, install the Spark Operator, create the volume claim
+        run: |
+          kind load docker-image velocia/engine-spark-vanilla:3.5.9 --name velocia
+          helm repo add spark-operator https://kubeflow.github.io/spark-operator
+          helm install spark-operator spark-operator/spark-operator --version 2.5.2 \
+            --namespace spark-operator --create-namespace \
+            --set "spark.jobNamespaces={default}" --set spark.serviceAccount.name=spark --wait
+          kubectl apply -f - <<'YAML'
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata: {name: velocia, namespace: default}
+          spec:
+            accessModes: [ReadWriteOnce]  # one kind node: every pod shares it
+            resources: {requests: {storage: 2Gi}}
+          YAML
+      - name: Kubernetes runner vs local runner
+        env:
+          VELOCIA_K8S_TEST: "1"
+        run: uv run pytest -m docker --basetemp=${{ runner.temp }}/pytest tests/test_k8s.py -x
+      - name: Cluster state on failure
+        if: failure()
+        run: |
+          kubectl get sparkapplications,pods -A -o wide || true
+          kubectl -n spark-operator logs deploy/spark-operator-controller --tail=100 || true
+      - name: Keep reports of failed tests
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k8s-reports
+          path: |
+            ${{ runner.temp }}/pytest/**/report.json
+            ${{ runner.temp }}/pytest/**/driver.log
+            ${{ runner.temp }}/pytest/**/manifest.json
+          retention-days: 7

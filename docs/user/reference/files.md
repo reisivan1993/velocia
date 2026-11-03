@@ -134,7 +134,10 @@ An experiment file (docs/04-interfaces.md §3).
 | `namespace` | string | 'default' | Kubernetes namespace. |
 | `node_selector` | map of string | {} | Node labels the pods must match. |
 | `tolerations` | list of map of string | [] | Pod tolerations. |
-| `resources` | map of integer | {} | Extended resources per executor, e.g. accelerator devices. |
+| `resources` | map of integer | {} | Extended resources per executor pod, e.g. `{nvidia.com/gpu: 1}`. |
+| `volume_claim` | string | 'velocia' | PersistentVolumeClaim mounted at `/velocia` in every pod: datasets, run inputs, outputs and event logs. ReadWriteMany when executors span nodes. |
+| `service_account` | string | 'spark' | Service account of the driver pod; it must be allowed to create executor pods (the Spark Operator's chart sets one up). |
+| `context` | string (optional) | None | kubectl context to use; default: the current one. |
 
 ### KeyDistribution
 

@@ -236,6 +236,19 @@
     "K8sCluster": {
       "additionalProperties": false,
       "properties": {
+        "context": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "kubectl context to use; default: the current one.",
+          "title": "Context"
+        },
         "driver_memory": {
           "default": "2g",
           "description": "Driver memory, e.g. `2g`.",
@@ -296,7 +309,7 @@
             "type": "integer"
           },
           "default": {},
-          "description": "Extended resources per executor, e.g. accelerator devices.",
+          "description": "Extended resources per executor pod, e.g. `{nvidia.com/gpu: 1}`.",
           "title": "Resources",
           "type": "object"
         },
@@ -304,6 +317,12 @@
           "const": "k8s",
           "description": "`local` (Docker), `k8s` or `external` (a cluster Velocia doesn't manage).",
           "title": "Runner",
+          "type": "string"
+        },
+        "service_account": {
+          "default": "spark",
+          "description": "Service account of the driver pod; it must be allowed to create executor pods (the Spark Operator's chart sets one up).",
+          "title": "Service Account",
           "type": "string"
         },
         "tolerations": {
@@ -317,6 +336,12 @@
           },
           "title": "Tolerations",
           "type": "array"
+        },
+        "volume_claim": {
+          "default": "velocia",
+          "description": "PersistentVolumeClaim mounted at `/velocia` in every pod: datasets, run inputs, outputs and event logs. ReadWriteMany when executors span nodes.",
+          "title": "Volume Claim",
+          "type": "string"
         }
       },
       "required": [
