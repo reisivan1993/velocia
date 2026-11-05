@@ -16,6 +16,7 @@ def test_doctor_reports_missing_docker_clearly(
     checks = {c.name: c for c in doctor(VelociaConfig(results_dir=str(tmp_path)))}
     assert checks["docker"].status == "fail"
     assert "docker CLI not found" in checks["docker"].detail
+    assert checks["aws"].status == "skip" and "only the aws runner" in checks["aws"].detail
     monkeypatch.chdir(tmp_path)
     result = CliRunner().invoke(app, ["doctor"])
     assert result.exit_code == 1 and "FAIL  docker" in result.output

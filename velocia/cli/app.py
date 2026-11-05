@@ -37,6 +37,7 @@ from velocia.report.build import (
 )
 from velocia.report.compare import CompareError
 from velocia.report.compare import compare as run_compare
+from velocia.runners.aws import AwsError
 from velocia.store.catalog import Catalog
 from velocia.workloads import UnknownUnitError, get_workload, load_workloads, select_units
 
@@ -233,7 +234,7 @@ def run(
     try:
         prepared = prepare(experiment, config)
         experiment_id = Orchestrator(prepared, config, out_dir, echo=typer.echo).run(resume)
-    except RunError as exc:
+    except (RunError, AwsError) as exc:
         _fail(str(exc))
     with Catalog(out_dir) as catalog:
         doc = build_report(catalog, experiment_id)
@@ -355,7 +356,7 @@ def teardown(
     yes: Annotated[bool, typer.Option("--yes", help="Delete what is found.")] = False,
 ) -> None:
     """Find (and with --yes delete) AWS resources Velocia created and left behind."""
-    from velocia.runners.aws import AwsError, RealShell, leftovers
+    from velocia.runners.aws import RealShell, leftovers
 
     shell = RealShell(typer.echo)
     try:
@@ -428,8 +429,6 @@ def teardown(
 
 def _attempt(shell: Any, argv: list[str], retries: int = 0) -> list[str]:
     import time
-
-    from velocia.runners.aws import AwsError
 
     for attempt in range(retries + 1):
         try:

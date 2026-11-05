@@ -1,5 +1,9 @@
 # Spec changelog
 
+## 2026-11-05 — AWS preflight
+
+- A run with an `aws` cluster first checks that `eksctl`, `aws`, `helm`, `kubectl` and `docker` are installed and that the AWS credentials work (`sts get-caller-identity`), and stops before creating or recording anything if not. `velocia doctor` gains an `aws` line (tools found or not). The IAM permissions the runner needs are listed in the user docs.
+
 ## 2026-11-03 — AWS runner (T51-T54, built without real AWS runs)
 
 - `runner: aws` (ADR-11): `region`, `node_type`, `node_hour_usd`, `budget_usd`, `spot`, `kubernetes_version`, plus the usual executor fields (one executor per node). Velocia creates an EKS cluster (`eksctl`), EFS storage, ECR repositories, the Spark Operator (`helm`) and the volume claim, runs the experiment with the `k8s` runner, and deletes everything in a `finally` path. `K8sCluster` gains `kubeconfig`.

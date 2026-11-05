@@ -59,6 +59,7 @@ from velocia.runners.aws import (
     RealShell,
     estimate_usd,
     instance_platform,
+    preflight,
 )
 from velocia.runners.base import AppResult, AppSpec
 from velocia.runners.external import ExternalRunner, declared_hardware
@@ -482,6 +483,10 @@ class Orchestrator:
 
     def _run(self, resume: bool) -> str:
         exp = self.p.experiment
+        for name, cluster in exp.named_clusters.items():
+            if isinstance(cluster, AwsCluster):
+                account = preflight(cluster.region, self.shell)
+                self.echo(f"AWS cluster {name}: account {account}, tools found")
         with Catalog(self.results_dir) as catalog:
             existing = catalog.latest_unfinished(exp.name, self.p.spec_hash) if resume else None
             if resume and existing is None:

@@ -106,5 +106,5 @@ what could not be deleted; `velocia teardown` finds leftovers by their `velocia:
   real run needs the owner's go-ahead and a small cap.
 - **SF100 data**: datasets are copied in from the workstation with `kubectl cp`, which does not
   scale to SF100; on-cluster generation with the official kits (T49) is the next step.
-- IAM permissions needed by the caller are not listed yet (eksctl's documented minimum plus EFS
-  and ECR).
+- IAM permissions are listed in `docs/user/aws.md` from the tools' documentation, not yet
+  confirmed by a real run.

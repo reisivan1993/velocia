@@ -18,6 +18,7 @@ from velocia.engines.registry import get_engine, load_engines
 from velocia.hardware.probe import probe_local
 from velocia.orchestrator.run import Orchestrator, RunError, prepare
 from velocia.report.build import TOTAL_UNIT, build_report
+from velocia.runners.aws import TOOLS as AWS_TOOLS
 from velocia.store.catalog import Catalog
 
 Status = Literal["ok", "warn", "fail", "skip"]
@@ -95,7 +96,21 @@ def doctor(config: VelociaConfig) -> list[Check]:
         )
     kubectl = shutil.which("kubectl")
     checks.append(
-        Check("kubernetes", "skip", "k8s runner not available yet" if kubectl else "no kubectl")
+        Check(
+            "kubernetes",
+            "ok" if kubectl else "skip",
+            "kubectl found" if kubectl else "no kubectl; only the k8s and aws runners need it",
+        )
+    )
+    missing = [tool for tool in AWS_TOOLS if shutil.which(tool) is None]
+    checks.append(
+        Check(
+            "aws",
+            "skip" if missing else "ok",
+            f"no {', '.join(missing)}; only the aws runner needs them"
+            if missing
+            else f"{', '.join(AWS_TOOLS)} found (credentials are checked when a run starts)",
+        )
     )
     return checks
 

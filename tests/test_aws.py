@@ -16,6 +16,7 @@ from velocia.runners.aws import (
     hourly_usd,
     instance_platform,
     leftovers,
+    preflight,
 )
 
 CLUSTER = AwsCluster(
@@ -230,3 +231,50 @@ def test_run_asks_before_spending() -> None:
     assert result.exit_code == 1
     assert "This creates an EKS cluster (8 x m6i.4xlarge in us-east-1)" in result.output
     assert "not started" in result.output
+
+
+def test_preflight_before_anything_is_created() -> None:
+    shell = _shell()
+    assert preflight("us-east-1", shell, which=lambda tool: f"/bin/{tool}") == "123456789012"
+    assert shell.commands == [
+        "aws --region us-east-1 sts get-caller-identity --query Account --output text"
+    ]
+    with pytest.raises(AwsError, match="not installed: eksctl, helm"):
+        preflight(
+            "us-east-1", shell, which=lambda tool: None if tool in ("eksctl", "helm") else tool
+        )
+
+    def expired(argv: list[str], stdin: str | None = None) -> str:
+        raise AwsError("ExpiredToken")
+
+    with pytest.raises(AwsError, match="credentials don't work: ExpiredToken"):
+        preflight("us-east-1", expired, which=lambda tool: tool)
+
+
+def test_run_stops_at_preflight_with_nothing_created(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil
+    from types import SimpleNamespace
+
+    from velocia.config import VelociaConfig
+    from velocia.config.models import Experiment
+    from velocia.orchestrator.run import Orchestrator
+
+    monkeypatch.setattr(shutil, "which", lambda tool: None if tool == "helm" else tool)
+    experiment = Experiment.model_validate(
+        {
+            "name": "a",
+            "workload": {"kind": "sql", "suite": "tpch", "scale_factor": 1},
+            "engines": ["spark-vanilla"],
+            "reference_engine": "spark-vanilla",
+            "cluster": CLUSTER.model_dump(),
+        }
+    )
+    prepared = SimpleNamespace(experiment=experiment)
+    orch = Orchestrator(prepared, VelociaConfig(), tmp_path, echo=lambda line: None)  # type: ignore[arg-type]
+    shell = _shell()
+    orch.shell = shell
+    with pytest.raises(AwsError, match="not installed: helm"):
+        orch._run(resume=False)
+    assert shell.commands == [] and not (tmp_path / "catalog.duckdb").exists()

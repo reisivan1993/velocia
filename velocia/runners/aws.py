@@ -13,6 +13,7 @@ charges elapsed time at the cluster's hourly rate from the first command on.
 
 import json
 import shlex
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -30,6 +31,7 @@ NAT_GATEWAY_USD_PER_HOUR = 0.045  # eksctl's default VPC has one NAT gateway
 PROVISION_HOURS = 0.75  # create (~20 min) plus delete (~15 min) plus image pushes
 OPERATOR_CHART_VERSION = "2.5.2"
 EFS_CSI_POLICY = "arn:aws:iam::aws:policy/service-role/AmazonEFSCSIDriverPolicy"
+TOOLS = ("eksctl", "aws", "helm", "kubectl", "docker")
 GRAVITON = ("a1.", "c6g", "c7g", "c8g", "m6g", "m7g", "m8g", "r6g", "r7g", "r8g", "t4g", "x2g")
 
 
@@ -67,6 +69,25 @@ class DryRunShell:
             if marker in argv:
                 return answer
         return "<" + (argv[1] if len(argv) > 1 else argv[0]) + " output>"
+
+
+def preflight(region: str, shell: Shell, which: Callable[[str], str | None] | None = None) -> str:
+    """Before anything is created: the tools are installed and the AWS credentials work.
+
+    Returns the account id. Without this a missing ``helm`` or an expired session would only
+    show up after the cluster (and its cost) already exists.
+    """
+    found = which or shutil.which
+    missing = [tool for tool in TOOLS if found(tool) is None]
+    if missing:
+        raise AwsError(f"not installed: {', '.join(missing)} (see docs/user/aws.md)")
+    try:
+        identity = ["sts", "get-caller-identity", "--query", "Account", "--output", "text"]
+        return shell(["aws", "--region", region, *identity]).strip()
+    except AwsError as exc:
+        raise AwsError(
+            f"AWS credentials don't work: {exc}; set up a profile or AWS_* variables"
+        ) from exc
 
 
 def instance_platform(node_type: str) -> str:

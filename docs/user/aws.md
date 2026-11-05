@@ -33,6 +33,29 @@ cluster:
   (`m7g`, `c7g`, ...) needs `linux/arm64`. Velocia refuses a mismatch before starting.
 - A budget alarm on the AWS side as a second safety net.
 
+`velocia doctor` shows whether the tools are installed. When a run starts, Velocia checks the
+tools and your credentials (`aws sts get-caller-identity`) before it creates anything, so a
+missing tool or an expired session costs nothing.
+
+### Permissions
+
+The AWS identity you run as needs:
+
+- What `eksctl` needs to create and delete a cluster: its
+  [minimum IAM policies](https://eksctl.io/usage/minimum-iam-policies/) (`AmazonEC2FullAccess`,
+  `AWSCloudFormationFullAccess`, plus its `EksAllAccess` and `IamLimitedAccess` policies). The
+  IAM part creates the role for the EFS storage driver.
+- EFS: create and delete file systems and mount targets, tag them, describe them
+  (`elasticfilesystem:CreateFileSystem`, `CreateMountTarget`, `DeleteMountTarget`,
+  `DeleteFileSystem`, `Describe*`, `TagResource`).
+- ECR: create, tag and delete repositories and push images (`ecr:CreateRepository`,
+  `DeleteRepository`, `TagResource`, `GetAuthorizationToken`, `DescribeRepositories`, and the
+  image upload actions `BatchCheckLayerAvailability`, `InitiateLayerUpload`,
+  `UploadLayerPart`, `CompleteLayerUpload`, `PutImage`).
+- `sts:GetCallerIdentity`.
+
+A separate account (or one only for benchmarks) keeps this away from anything else.
+
 ## Before you spend anything
 
 ```bash
